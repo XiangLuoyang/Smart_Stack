@@ -1,49 +1,37 @@
 import streamlit as st
 import yfinance as yf
-import pandas as pd
-from datetime import date, datetime
-
+from datetime import datetime, timedelta, date
+from typing import List
 from prophet import Prophet
-from prophet.plot import plot_plotly
-from plotly import graph_objects as go
-from numpy import mean
+# from prophet.plot import plot_plotly  # 如果不需要使用 Prophet 的绘图功能，可以删除此行
+import pandas as pd
+from statistics import mean
+import plotly.graph_objects as go
 
-# --- 页面配置 ---
-st.set_page_config(layout="wide")
+# --- 函数定义 ---
 
-# --- 标题 ---
-st.title("📈 股票预测应用")
 
-# --- 默认值 ---
-START = "2015-01-01"
-TODAY = date.today().strftime("%Y-%m-%d")
-
-# --- 用户输入 ---
-st.sidebar.header("股票代码")
-selected_stock = st.sidebar.text_input("输入股票代码 (例如: AAPL)", "AAPL")
-
-# --- 参数设置 ---
-st.sidebar.header("预测参数")
-n_months = st.sidebar.slider("预测月数:", 1, 36, 12)
-period = n_months * 30
-
-# --- 数据加载 ---
 @st.cache_data
-def load_data(ticker):
-    data = yf.download(ticker, START, TODAY)
+def load_data(ticker: str):
+    """从 Yahoo Finance 下载股票数据"""
+    data = yf.download(ticker, period="max")
     data.reset_index(inplace=True)
     return data
 
 
-# --- 主要内容区域 ---
-if selected_stock:
-    # --- 加载数据 ---
-    data_load_state = st.text("加载数据...")
-    try:
-        data = load_data(selected_stock)
-        data_load_state.text("加载数据...完成!")
+@st.cache_data
+def get_sz100_tickers() -> List[str]:
+    """从 CSV 文件中读取深证100股票代码列表"""
+    df = pd.read_csv("sz100_tickers.csv")
+    tickers = df.iloc[:, 0].tolist()
+    return tickers
 
-        # --- 数据展示 ---
+
+def calculate_expected_return(ticker: str, start_date: datetime, period: int) -> float:
+    """计算预期收益率"""
+    try:
+        data = load_data(ticker)
+
         data_renamed = data.rename(
             columns={
                 "Date": "日期",
@@ -56,168 +44,132 @@ if selected_stock:
             }
         )
 
-        # --- 原始数据 ---
-        st.subheader("原始数据")
-        st.write(data_renamed.tail())
-
-        st.plotly_chart(
-            go.Figure()
-            .add_trace(
-                go.Scatter(
-                    x=data_renamed["日期"],
-                    y=data_renamed["开盘价"],
-                    name="开盘价",
-                )
-            )
-            .add_trace(
-                go.Scatter(
-                    x=data_renamed["日期"],
-                    y=data_renamed["收盘价"],
-                    name="收盘价",
-                )
-            )
-            .update_layout(
-                title_text="带有范围滑动条的时间序列数据",
-                xaxis_rangeslider_visible=True,
-            ),
-            use_container_width=True,
+        filtered_data = data_renamed[data_renamed["日期"] >= str(start_date)]
+        df_train = filtered_data[["日期", "收盘价"]].rename(
+            columns={"日期": "ds", "收盘价": "y"}
         )
+        m = Prophet()
+        m.fit(df_train)
+        future = m.make_future_dataframe(periods=period)
+        forecast = m.predict(future)
+        last_actual_price = filtered_data["收盘价"].iloc[-1]
+        mean_future_price = mean(forecast["yhat"].tail(period))
+        return (mean_future_price - last_actual_price) / last_actual_price * 100
+    except Exception:
+        return float("-inf")
+
+
+# --- 页面配置 ---
+st.set_page_config(page_title="股票数据分析", page_icon=":chart_with_upwards_trend:")
+st.title("股票数据分析")
+
+# --- 股票选择 ---
+selected_stock = st.sidebar.selectbox("选择股票代码", get_sz100_tickers())
+
+# --- 参数设置 ---
+period = st.sidebar.slider("预测天数", min_value=1, max_value=365, value=30)
+start_date = st.sidebar.date_input(
+    "选择预测的开始日期",
+    value=datetime(2020, 1, 1),
+    min_value=datetime(2015, 1, 1),
+    max_value=date.today(),
+)
+
+# --- 主要内容区域 ---
+if selected_stock:
+    # --- 加载数据 ---
+    data_load_state = st.text("加载数据...")
+    try:
+        data = load_data(selected_stock)
+
+        # --- 数据重命名 ---
+        data_renamed = data.rename(
+            columns={
+                "Date": "日期",
+                "Open": "开盘价",
+                "High": "最高价",
+                "Low": "最低价",
+                "Close": "收盘价",
+                "Adj Close": "调整后收盘价",
+                "Volume": "成交量",
+            }
+        )
+
+        data_load_state.text("加载数据...完成!")
+
+        # --- 数据展示 ---
+        st.subheader("股票数据")
+        st.write(data_renamed.tail(10))
 
         # --- 数据预处理 ---
-        start_date = st.date_input(
-            "选择预测的开始日期",
-            value=datetime(2020, 1, 1),
-            min_value=datetime(2015, 1, 1),
-            max_value=date.today(),
-        )
         filtered_data = data_renamed[data_renamed["日期"] >= str(start_date)]
         df_train = filtered_data[["日期", "收盘价"]].rename(
             columns={"日期": "ds", "收盘价": "y"}
         )
 
         # --- 模型训练和预测 ---
-        try:
-            m = Prophet()
-            m.fit(df_train)
-            future = m.make_future_dataframe(periods=period)
-            forecast = m.predict(future)
+        m = Prophet()
+        m.fit(df_train)
+        future = m.make_future_dataframe(periods=period)
+        forecast = m.predict(future)
 
-            # --- 结果展示 ---
-            forecast_renamed = forecast.rename(
-                columns={
-                    "ds": "日期",
-                    "yhat": "预测值",
-                    "yhat_lower": "预测值下限",
-                    "yhat_upper": "预测值上限",
-                    "trend": "趋势",
-                    "trend_lower": "趋势下限",
-                    "trend_upper": "趋势上限",
-                }
-            )
+        # --- 计算过去时间段的误差
+        today = datetime.today()
+        one_year_ago = today - timedelta(days=365)
+        one_quarter_ago = today - timedelta(days=90)
+        one_month_ago = today - timedelta(days=30)
 
-            # --- 预测数据 ---
-            st.subheader("预测数据")
-            st.write(forecast_renamed[
-                    [
-                        "日期",
-                        "预测值",
-                        "预测值下限",
-                        "预测值上限",
-                        "趋势",
-                        "趋势下限",
-                        "趋势上限",
-                    ]
-                ].tail())
-            
-            st.plotly_chart(
-                plot_plotly(m, forecast), use_container_width=True
-            )
+        def calculate_error(start_date, end_date):
+            mask = (forecast['ds'] >= start_date) & (forecast['ds'] <= end_date)
+            forecast_period = forecast.loc[mask]
+            actual_period = df_train.loc[df_train['ds'].isin(forecast_period['ds'])]
+            error = ((forecast_period['yhat'] - actual_period['y']) / actual_period['y'] * 100).mean()
+            return error
 
-            # --- 预测组件 ---
-            components_df = pd.concat(
-                [forecast[["ds"]], forecast.drop(columns=["ds"])], axis=1
-            )
-            components_renamed = components_df.rename(
-                columns={
-                    "ds": "日期",
-                    "trend": "趋势",
-                    "trend_lower": "趋势下限",
-                    "trend_upper": "趋势上限",
-                    "additive_terms": "加性项",
-                    "additive_terms_lower": "加性项下限",
-                    "additive_terms_upper": "加性项上限",
-                    "daily": "日度",
-                    "daily_lower": "日度下限",
-                    "daily_upper": "日度上限",
-                    "weekly": "周度",
-                    "weekly_lower": "周度下限",
-                    "weekly_upper": "周度上限",
-                    "yearly": "年度",
-                    "yearly_lower": "年度下限",
-                    "yearly_upper": "年度上限",
-                    "multiplicative_terms": "乘法项",
-                    "multiplicative_terms_lower": "乘法项下限",
-                    "multiplicative_terms_upper": "乘法项上限",
-                }
-            )
-            
-            st.subheader("预测组件")
-            st.write(components_renamed.tail())
+        one_year_error = calculate_error(one_year_ago, today)
+        one_quarter_error = calculate_error(one_quarter_ago, today)
+        one_month_error = calculate_error(one_month_ago, today)
 
-            st.plotly_chart(
-                go.Figure()
-                .add_trace(
-                    go.Scatter(
-                        x=filtered_data["日期"],
-                        y=filtered_data["收盘价"],
-                        name="实际",
-                    )
-                )
-                .add_trace(
-                    go.Scatter(
-                        x=forecast_renamed["日期"],
-                        y=forecast_renamed["预测值"],
-                        name="预测",
-                    )
-                )
-                .update_layout(
-                    title_text="预测与实际对比",
-                    xaxis_rangeslider_visible=True,
-                ),
-                use_container_width=True,
-            )
+        # ---  历史数据和预测可视化 ---
+        st.subheader("历史数据及预测")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_train['ds'], y=df_train['y'], mode='lines', name='历史数据'))
+        fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='预测数据'))
+        fig.update_layout(title_text="股票价格走势", xaxis_title="日期", yaxis_title="收盘价")
+        st.plotly_chart(fig)
 
-            # --- 业务解读和买入意见 ---
-            st.subheader("业务解读和买入意见")
+        # --- 误差表格 ---
+        st.subheader("预测误差")
+        error_data = {
+            "时间段": ["过去一年", "过去一个季度", "过去一个月"],
+            "平均误差 (%)": [f"{one_year_error:.2f}", f"{one_quarter_error:.2f}", f"{one_month_error:.2f}"]
+        }
+        error_df = pd.DataFrame(error_data)
+        st.table(error_df)
 
-            # --- 基于预测数据的业务解读 ---
-            last_actual_price = filtered_data["收盘价"].iloc[-1]
-            future_prices = forecast["yhat"].tail(period)
-            mean_future_price = mean(future_prices)
+        # --- 业务解读和买入意见 ---
+        st.subheader("业务解读和买入意见")
+        st.write("根据以上分析，预测未来", period, "天", selected_stock, "的预期收益率为", "{:.2f}".format(calculate_expected_return(selected_stock, start_date, period)), "%。")
+        # 这里可以根据模型预测的结果，结合股票的市场表现、行业趋势等因素，给出更具体的业务解读和买入建议。
+        # 例如：
+        if calculate_expected_return(selected_stock, start_date, period) > 5:
+            st.write("该股票近期表现强势，预测未来收益可观，建议投资者关注买入机会。")
+        elif calculate_expected_return(selected_stock, start_date, period) > 0:
+            st.write("该股票未来收益相对稳定，可以考虑逢低买入。")
+        else:
+            st.write("该股票未来收益存在一定风险，建议投资者谨慎观望。")
 
-            if mean_future_price > last_actual_price:
-                buy_opinion = "未来趋势看涨，建议考虑买入。"
-            else:
-                buy_opinion = "未来趋势为下行或持平，建议谨慎操作。"
+        # --- 深证100股票预测 ---
+        if st.button("开始预测深证100股票"):
+            st.subheader("深证100股票预测")
+            sz100_tickers = get_sz100_tickers()
+            returns = []
+            for ticker in sz100_tickers:
+                expected_return = calculate_expected_return(ticker, start_date, period)
+                returns.append({"股票代码": ticker, "预期收益率": expected_return})
+            df_returns = pd.DataFrame(returns)
+            top_10_stocks = df_returns.sort_values(by="预期收益率", ascending=False).head(10)
+            st.write(top_10_stocks)
 
-            business_analysis = f"""
-            ### 当前情况
-            - 当前股票代码：{selected_stock}
-            - 当前日期：{filtered_data['日期'].iloc[-1].strftime('%Y-%m-%d')}
-            - 当前收盘价：{last_actual_price:.2f} 元
-            - 预测开始日期：{str(start_date)}
-
-            ### 未来趋势预测
-            - 未来 {n_months} 个月内平均预测值：{mean_future_price:.2f} 元
-            - 当前价格与未来预测平均价格之比：{mean_future_price / last_actual_price:.2f}
-
-            ### 综合分析
-            {buy_opinion}
-            """
-
-            st.markdown(business_analysis)
-
-        except Exception as e:
-            st.write(f"Prophet 模型预测出错: {e}")
     except Exception as e:
         data_load_state.text(f"加载数据...出错: {e}")
