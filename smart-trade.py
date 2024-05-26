@@ -2,17 +2,16 @@ import streamlit as st
 import yfinance as yf
 from datetime import datetime, timedelta, date
 from typing import List
-from prophet import Prophet
-# from prophet.plot import plot_plotly  # 如果不需要使用 Prophet 的绘图功能，可以删除此行
 import pandas as pd
-from statistics import mean
+from prophet import Prophet
+from prophet.plot import plot_plotly
 import plotly.graph_objects as go
+from statistics import mean
+
 
 # --- 函数定义 ---
-
-
 @st.cache_data
-def load_data(ticker: str):
+def load_data(ticker: str) -> pd.DataFrame:
     """从 Yahoo Finance 下载股票数据"""
     data = yf.download(ticker, period="max")
     data.reset_index(inplace=True)
@@ -149,7 +148,7 @@ if selected_stock:
 
         # --- 业务解读和买入意见 ---
         st.subheader("业务解读和买入意见")
-        st.write("根据以上分析，预测未来", period, "天", selected_stock, "的预期收益率为", "{:.2f}".format(calculate_expected_return(selected_stock, start_date, period)), "%。")
+        st.write("根据以上分析，预测未来", period, "天", selected_stock, "的预期收益率为", "{:.2f}%".format(calculate_expected_return(selected_stock, start_date, period)), "。")
         # 这里可以根据模型预测的结果，结合股票的市场表现、行业趋势等因素，给出更具体的业务解读和买入建议。
         # 例如：
         if calculate_expected_return(selected_stock, start_date, period) > 5:
@@ -165,10 +164,18 @@ if selected_stock:
             sz100_tickers = get_sz100_tickers()
             returns = []
             for ticker in sz100_tickers:
-                expected_return = calculate_expected_return(ticker, start_date, period)
-                returns.append({"股票代码": ticker, "预期收益率": expected_return})
+                try:
+                    # 获取股票名称
+                    stock_info = yf.Ticker(ticker).info
+                    stock_name = stock_info.get('longName') or stock_info.get('shortName') or 'N/A'
+
+                    expected_return = calculate_expected_return(ticker, start_date, period)
+                    returns.append({"股票代码": ticker, "股票名称": stock_name, "预期收益率 (%)": f"{expected_return:.2f}%"})
+                except Exception:
+                    # 处理获取股票信息失败的情况
+                    returns.append({"股票代码": ticker, "股票名称": "N/A", "预期收益率 (%)": "N/A"})
             df_returns = pd.DataFrame(returns)
-            top_10_stocks = df_returns.sort_values(by="预期收益率", ascending=False).head(10)
+            top_10_stocks = df_returns.sort_values(by="预期收益率 (%)", ascending=False).head(10)
             st.write(top_10_stocks)
 
     except Exception as e:
