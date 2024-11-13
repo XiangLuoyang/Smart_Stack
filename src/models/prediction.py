@@ -8,6 +8,7 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 import logging
+import plotly.graph_objects as go
 
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -76,9 +77,9 @@ import numpy as np
 class EnhancedPrediction:
     def __init__(self):
         self.models = {
-            'xgboost': XGBRegressor(),
-            'lightgbm': LGBMRegressor(),
-            'catboost': CatBoostRegressor(verbose=False)
+            'xgboost': XGBRegressor(n_estimators=100),
+            'lightgbm': LGBMRegressor(n_estimators=100),
+            'catboost': CatBoostRegressor(iterations=100)
         }
         self.scaler = StandardScaler()
         self.param_grids = {
@@ -198,3 +199,32 @@ class EnhancedPrediction:
             return {'action': 'Sell', 'trend_analysis': '下降趋势', 'technical_analysis': '技术指标看跌', 'risk_assessment': '中等风险', 'recommendation': '卖出'}
         else:
             return {'action': 'Hold', 'trend_analysis': '横盘整理', 'technical_analysis': '技术指标中性', 'risk_assessment': '中等风险', 'recommendation': '观望'}
+
+    def plot_prediction(self, historical, predicted):
+        """绘制历史数据和预测数据的图表"""
+        fig = go.Figure()
+        
+        # 添加历史数据
+        fig.add_trace(go.Scatter(
+            x=list(range(len(historical))),
+            y=historical,
+            mode='lines',
+            name='历史数据'
+        ))
+        
+        # 添加预测数据
+        fig.add_trace(go.Scatter(
+            x=list(range(len(historical), len(historical) + len(predicted))),
+            y=predicted,
+            mode='lines',
+            name='预测数据',
+            line=dict(dash='dash')
+        ))
+        
+        fig.update_layout(
+            title='股价预测',
+            xaxis_title='时间',
+            yaxis_title='价格'
+        )
+        
+        return fig

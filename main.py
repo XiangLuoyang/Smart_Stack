@@ -18,61 +18,6 @@ from src.models.prediction import EnhancedPrediction
 # 设置日志配置
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class EnhancedPrediction:
-    # ...existing code...
-    
-    def feature_engineering(self, data):
-        # 添加特征工程逻辑
-        # 例如：计算移动平均线、技术指标等
-        data['MA5'] = data['Close'].rolling(window=5).mean()
-        data['MA20'] = data['Close'].rolling(window=20).mean()
-        data['MA50'] = data['Close'].rolling(window=50).mean()
-        data['MA60'] = data['Close'].rolling(window=60).mean()
-        # ...其他特征工程逻辑...
-        return data
-    
-    def ensemble_predict(self, data):
-        # 添加预测逻辑
-        # 例如：使用多个模型进行预测并计算加权平均值
-        predictions = data['Close'] * 1.02  # 示例预测逻辑
-        predictions.index = data.index  # 确保 predictions 有索引
-        confidence = 0.95  # 示例置信度
-        model_weights = {'model1': 0.5, 'model2': 0.5}  # 示例模型权重
-        return {
-            'predictions': predictions,
-            'confidence': confidence,
-            'model_weights': model_weights
-        }
-    
-    def generate_signals(self, current_price, predicted_price):
-        # 添加生成交易信号的逻辑
-        if predicted_price > current_price * 1.05:
-            action = 'Strong Buy'
-        elif predicted_price > current_price:
-            action = 'Buy'
-        elif predicted_price < current_price * 0.95:
-            action = 'Strong Sell'
-        elif predicted_price < current_price:
-            action = 'Sell'
-        else:
-            action = 'Hold'
-        
-        return {
-            'action': action,
-            'trend_analysis': '示例趋势分析',
-            'technical_analysis': '示例技术分析',
-            'risk_assessment': '示例风险评估',
-            'recommendation': '示例建议操作'
-        }
-    
-    def plot_prediction(self, actual_prices, predicted_prices):
-        import plotly.graph_objects as go
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=actual_prices.index, y=actual_prices, mode='lines', name='实际价格'))
-        fig.add_trace(go.Scatter(x=predicted_prices.index, y=predicted_prices, mode='lines', name='预测价格'))
-        fig.update_layout(title='股票价格预测', xaxis_title='日期', yaxis_title='价格')
-        return fig
-
 def main():
     try:
         # 设置页面配置
@@ -185,36 +130,6 @@ def main():
                     price_range = f"¥{format_number(data['Low'].min())} - ¥{format_number(data['High'].max())}"
                     st.metric("价格区间", price_range)
                 
-                # 显示数据表格
-                st.subheader("历史数据")
-                st.dataframe(
-                    data.sort_values('Date', ascending=False)
-                        .style.format({
-                            'Open': '{:.2f}',
-                            'High': '{:.2f}',
-                            'Low': '{:.2f}',
-                            'Close': '{:.2f}',
-                            'Volume': '{:,.0f}',
-                            'RSI': '{:.2f}',
-                            'MA5': '{:.2f}',
-                            'MA20': '{:.2f}',
-                            'MA50': '{:.2f}',  # Add MA50
-                            'MA60': '{:.2f}',
-                            'MACD': '{:.2f}',
-                            'Signal': '{:.2f}',
-                            'MACD_hist': '{:.2f}'
-                        })
-                )
-                
-                # 添加下载按钮
-                csv = data.to_csv(index=False)
-                st.download_button(
-                    label="下载数据",
-                    data=csv,
-                    file_name=f'{stock_code}_data.csv',
-                    mime='text/csv'
-                )
-                
                 # 预测分析部分
                 if data is not None:
                     # Verify columns exist
@@ -229,32 +144,30 @@ def main():
                     
                     try:
                         if data is not None and not data.empty:
-                            # 创建预测模型实例
                             predictor = EnhancedPrediction()
-                            
-                            # 特征工程
-                            features_df = predictor.feature_engineering(data.copy())
-                            
-                            # 获取预测结果
                             results = predictor.ensemble_predict(data.copy())
-                            st.write(f"预测置信度: {results['confidence']:.2%}")
-                            st.write("模型权重:", results['model_weights'])
-                            pred_price = results['predictions']
                             
-                            # 显示预测结果
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.metric(
-                                    "5日后预测价格",
-                                    f"¥{pred_price.iloc[-1]:.2f}",
-                                    f"{((pred_price.iloc[-1] - data['Close'].iloc[-1]) / data['Close'].iloc[-1] * 100):.2f}%"
+                            if results and 'predictions' in results:
+                                # 获取当前价格和预测价格
+                                current_price = float(data['Close'].iloc[-1])  # Pandas索引转float
+                                predicted_price = float(results['predictions'][-1])  # NumPy索引转float
+                                
+                                # 生成交易信号
+                                signals = predictor.generate_signals(
+                                    current_price=current_price,
+                                    predicted_price=predicted_price
                                 )
-                            
-                            # 生成交易信号
-                            signals = predictor.generate_signals(data['Close'].iloc[-1], pred_price.iloc[-1])
-                            
-                            with col2:
+                                
+                                # 显示预测结果
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric(
+                                        "5日后预测价格",
+                                        f"¥{predicted_price:.2f}",
+                                        f"{((predicted_price - current_price) / current_price * 100):.2f}%"
+                                    )
+                                
+                                # 显示交易信号
                                 signal_color = {
                                     'Strong Buy': 'green',
                                     'Buy': 'lightgreen',
@@ -265,19 +178,20 @@ def main():
                                 st.markdown(
                                     f"**交易信号:** ::{signal_color[signals['action']]}[{signals['action']}]"
                                 )
-                            
-                            # 展示分析依据
-                            st.markdown("### 分析依据")
-                            st.markdown(f"""
-                            - 趋势分析: {signals['trend_analysis']}
-                            - 技术指标: {signals['technical_analysis']}
-                            - 风险评估: {signals['risk_assessment']}
-                            - 建议操作: {signals['recommendation']}
-                            """)
-                            
-                            # 绘制预测走势图
-                            fig = predictor.plot_prediction(data['Close'], pred_price)
-                            st.plotly_chart(fig)
+                                
+                                # 展示分析依据
+                                st.markdown("### 分析依据")
+                                st.markdown(f"""
+                                - 趋势分析: {signals['trend_analysis']}
+                                - 技术指标: {signals['technical_analysis']}
+                                - 风险评估: {signals['risk_assessment']}
+                                - 建议操作: {signals['recommendation']}
+                                """)
+                                
+                                # 绘制预测走势图
+                                fig = predictor.plot_prediction(data['Close'], results['predictions'])
+                                st.plotly_chart(fig)
+                                
                     except Exception as e:
                         logging.error("预测过程出错", exc_info=True)
                         st.error(f"预测过程出错: {str(e)}")
