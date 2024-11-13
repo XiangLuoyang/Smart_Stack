@@ -4,3 +4,7 @@ numpy==1.23.5
 yfinance==0.2.18
 plotly==5.13.1
 scikit-learn==1.2.2
+xgboost>=1.7.5
+lightgbm>=3.3.5
+catboost>=1.2
+scikit-learn>=1.0.2

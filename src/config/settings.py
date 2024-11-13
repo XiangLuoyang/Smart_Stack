@@ -61,3 +61,20 @@ class ChartConfig:
         "template": "plotly_dark",
         "showlegend": True
     }
+
+class ModelConfig:
+    # 模型参数
+    PREDICTION_WINDOW = 5  # 预测窗口
+    HISTORY_WINDOW = 60   # 历史窗口
+    FEATURE_ENGINEERING = True
+    ENSEMBLE_LEARNING = True
+    
+    # 评估指标
+    METRICS = ['mse', 'mae', 'mape']
+    
+    # 模型超参数
+    MODEL_PARAMS = {
+        'xgboost': {'n_estimators': 100, 'learning_rate': 0.1},
+        'lightgbm': {'num_leaves': 31, 'learning_rate': 0.1},
+        'catboost': {'iterations': 100, 'learning_rate': 0.1}
+    }

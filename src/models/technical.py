@@ -119,3 +119,29 @@ class TechnicalIndicators:
                 "信号强度": "低",
                 "具体信号": ["计算出错，建议观望"]
             }
+
+    @staticmethod
+    def calculate_indicators(df):
+        # Create copy to avoid SettingWithCopyWarning
+        df = df.copy()
+        
+        # Calculate Moving Averages
+        for window in [5, 20, 50, 60]:
+            df[f'MA{window}'] = df['Close'].rolling(window=window).mean()
+        
+        # RSI
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+
+        # MACD
+        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = exp1 - exp2
+        df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        df['MACD_hist'] = df['MACD'] - df['Signal']
+
+        # Forward fill NaN values
+        return df.fillna(method='ffill').fillna(0)
