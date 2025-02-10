@@ -16,10 +16,25 @@ class StockDataLoader:
             
             # 将股票代码转换为列表
             tickers = df['code'].tolist()
-            return tickers
+            valid_tickers = []
+            for ticker in tickers:
+                if self.validate_stock_code(ticker):
+                    valid_tickers.append(ticker)
+            return valid_tickers
         except Exception as e:
             st.error(f"读取股票列表失败: {str(e)}")
             return []
+
+    def validate_stock_code(self, stock_code: str) -> bool:
+        """
+        验证股票代码是否有效，通过尝试从 Yahoo Finance 加载数据。
+        """
+        try:
+            stock = yf.Ticker(stock_code)
+            data = stock.history(period="1d") # 尝试获取一天的数据
+            return not data.empty
+        except Exception:
+            return False
 
     def load_stock_data(self, ticker: str) -> Tuple[pd.DataFrame, str]:
         """使用yfinance加载股票数据"""

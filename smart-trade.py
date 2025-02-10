@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 
 from src.config.settings import AppConfig, DataConfig, ChartConfig, ModelConfig
@@ -55,7 +55,7 @@ def main():
             period = st.slider("预测天数", 1, 365, 30)
             start_date = st.date_input(
                 "选择起始日期",
-                value=datetime(2020, 1, 1),
+                value=date.today(), # 默认设置为今天
                 min_value=datetime(2015, 1, 1),
                 max_value=date.today()
             )
@@ -102,7 +102,30 @@ def main():
                     st.error(f"处理数据时发生错误: {str(e)}")
         else:
             st.info("👈 请在侧边栏选择一个股票代码开始分析")
-            
+
+        st.subheader("🔥 TOP 10 股票推荐")
+        if st.button("生成 TOP10 股票推荐"):
+            with st.spinner("正在分析股票，生成推荐..."):
+                # 将 start_date 设置为 1 年前，以获取足够的数据计算收益率
+                recommendation_start_date = date.today() - timedelta(days=365)
+                top_10_stocks = return_predictor.get_top_stock_recommendations(
+                    tickers=data_loader.get_sz100_tickers(),
+                    start_date=recommendation_start_date, # 使用调整后的 start_date
+                    days=period,
+                    confidence=confidence_interval
+                )
+
+                if top_10_stocks:
+                    st.markdown("根据预期收益率，以下是推荐买入的 TOP 10 股票：")
+                    
+                    # 使用表格展示 TOP 10 股票推荐
+                    top_10_df = pd.DataFrame(top_10_stocks, columns=['股票代码', '预期收益率(%)'])
+                    top_10_df['预期收益率(%)'] = top_10_df['预期收益率(%)'].map('{:.2f}%'.format) # 格式化收益率
+                    st.dataframe(top_10_df, hide_index=True)
+                else:
+                    st.info("无法获取股票推荐信息。")
+
+
     except Exception as e:
         st.error(f"程序运行出错: {str(e)}")
 
