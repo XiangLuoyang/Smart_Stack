@@ -1,76 +1,43 @@
-from typing import List, Tuple, Optional
 import pandas as pd
 import yfinance as yf
+from typing import List, Tuple
+from src.config.settings import DataConfig
 import streamlit as st
-from datetime import datetime, timedelta
-from ..config.settings import DataConfig
-from src.models.technical import TechnicalIndicators
 
 class StockDataLoader:
-    """股票数据加载类"""
-    
-    def __init__(self):
-        self.data_path = 'data/sz100_stocks.csv'
-        
+    def __init__(self, data_config: DataConfig):
+        self.data_config = data_config
+
     def get_sz100_tickers(self) -> List[str]:
-        """获取深证100指数成分股列表"""
+        """从本地CSV文件获取深证100指数成分股列表"""
         try:
-            df = pd.read_csv(self.data_path)
-            if 'code' not in df.columns:
-                raise ValueError("股票代码列 'code' 不存在")
-            return sorted(df['code'].unique().tolist())
+            # 读取存储股票代码的CSV文件，列名为'code'
+            df = pd.read_csv(self.data_config.sz100_stocks_file)
+            
+            # 将股票代码转换为列表
+            tickers = df['code'].tolist()
+            return tickers
         except Exception as e:
-            st.error(f"读取深圳100股票列表失败: {str(e)}")
+            st.error(f"读取股票列表失败: {str(e)}")
             return []
 
-    def load_stock_data(self, stock_code: str) -> Tuple[pd.DataFrame, str]:
-        """加载股票数据"""
+    def load_stock_data(self, ticker: str) -> Tuple[pd.DataFrame, str]:
+        """使用yfinance加载股票数据"""
         try:
-            # 从Yahoo Finance获取数据
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=365)  # 获取一年数据
+            stock = yf.Ticker(ticker)
+            data = stock.history(period="2y")
             
-            ticker = yf.Ticker(stock_code)
-            df = ticker.history(start=start_date, end=end_date)
+            if data.empty:
+                return pd.DataFrame(), ticker
             
-            if df.empty:
-                st.warning(f"未找到股票 {stock_code} 的数据")
-                return pd.DataFrame(), stock_code
-                
-            # 重置索引，将Date作为列
-            df = df.reset_index()
+            # 重置索引，将日期变成列
+            data.reset_index(inplace=True)
             
-            # 确保必要的列存在
-            required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-            if not all(col in df.columns for col in required_columns):
-                raise ValueError("数据缺少必要的列")
-                
-            # 计算技术指标
-            ti = TechnicalIndicators()
-            df['MA5'] = ti.calculate_ma(df, 5)
-            df['MA20'] = ti.calculate_ma(df, 20)
-            df['MA50'] = ti.calculate_ma(df, 50)
-            df['MA60'] = ti.calculate_ma(df, 60)
-            df['RSI'] = ti.calculate_rsi(df)
-            macd, signal, hist = ti.calculate_macd(df)
-            df['MACD'] = macd
-            df['Signal'] = signal
-            df['MACD_hist'] = hist
+            # 使用股票代码作为股票名称
+            stock_name = ticker
             
-            # 填充缺失值
-            df = df.fillna(method='ffill').fillna(method='bfill')
-            
-            return df, stock_code
+            return data, stock_name
             
         except Exception as e:
-            st.error(f"加载股票数据失败: {str(e)}")
-            return pd.DataFrame(), stock_code
-
-    @staticmethod
-    def validate_stock_code(stock_code: str) -> bool:
-        """验证股票代码格式"""
-        if not stock_code:
-            return False
-        return (stock_code.endswith('.SZ') and 
-                stock_code[:-3].isdigit() and 
-                len(stock_code[:-3]) == 6)
+            st.error(f"加载数据失败: {str(e)}")
+            return pd.DataFrame(), ''

@@ -1,21 +1,25 @@
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from src.config.settings import ChartConfig
 import streamlit as st
+import numpy as np
 
-class StockCharts:
-    """现代科技风格图表生成类"""
-    
-    COLORS = {
-        'ma5': '#00bcd4',             # 短期均线（青色）
-        'ma20': '#7c4dff',            # 长期均线（紫色）
-        'up': '#00c853',              # 上涨（绿色）
-        'down': '#ff5252'             # 下跌（红色）
-    }
+class ChartGenerator:
+    def __init__(self, chart_config: ChartConfig):
+        self.chart_config = chart_config
 
-    @staticmethod
-    def create_stock_figure(data: pd.DataFrame):
+    def plot_stock_analysis(self, data: pd.DataFrame, forecast: np.ndarray):
+        """绘制股票分析图表"""
         try:
-            fig = go.Figure()
+            # 创建子图
+            fig = make_subplots(
+                rows=3, 
+                cols=1,
+                row_heights=[0.5, 0.25, 0.25],
+                subplot_titles=('价格走势', '成交量', '技术指标'),
+                vertical_spacing=0.1
+            )
 
             # 添加K线图
             fig.add_trace(
@@ -25,140 +29,71 @@ class StockCharts:
                     high=data['High'],
                     low=data['Low'],
                     close=data['Close'],
-                    name='价格',
-                    increasing_line_color=StockCharts.COLORS['up'],
-                    decreasing_line_color=StockCharts.COLORS['down'],
-                    text=[f'开盘: ¥{open:.2f}<br>'
-                          f'最高: ¥{high:.2f}<br>'
-                          f'最低: ¥{low:.2f}<br>'
-                          f'收盘: ¥{close:.2f}'
-                          for open, high, low, close in zip(data['Open'], 
-                                                          data['High'], 
-                                                          data['Low'], 
-                                                          data['Close'])],
-                    hoverinfo='text+x'
-                )
+                    name='K线'
+                ),
+                row=1, col=1
             )
 
             # 添加移动平均线
-            if 'MA5' in data.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=data['Date'],
-                        y=data['MA5'],
-                        name='MA5',
-                        line=dict(
-                            color=StockCharts.COLORS['ma5'],
-                            width=1.5
-                        ),
-                        text=[f'MA5: ¥{val:.2f}' for val in data['MA5']],
-                        hoverinfo='text+x'
-                    )
-                )
+            fig.add_trace(
+                go.Scatter(
+                    x=data['Date'],
+                    y=data['MA5'],
+                    name='MA5',
+                    line=dict(color='orange')
+                ),
+                row=1, col=1
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=data['Date'],
+                    y=data['MA20'],
+                    name='MA20',
+                    line=dict(color='blue')
+                ),
+                row=1, col=1
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=data['Date'],
+                    y=data['MA60'],
+                    name='MA60',
+                    line=dict(color='purple')
+                ),
+                row=1, col=1
+            )
 
-            if 'MA20' in data.columns:
-                fig.add_trace(
-                    go.Scatter(
-                        x=data['Date'],
-                        y=data['MA20'],
-                        name='MA20',
-                        line=dict(
-                            color=StockCharts.COLORS['ma20'],
-                            width=1.5
-                        ),
-                        text=[f'MA20: ¥{val:.2f}' for val in data['MA20']],
-                        hoverinfo='text+x'
-                    )
-                )
+            # 添加成交量图
+            fig.add_trace(
+                go.Bar(
+                    x=data['Date'],
+                    y=data['Volume'],
+                    name='成交量'
+                ),
+                row=2, col=1
+            )
+
+            # 添加RSI指标
+            fig.add_trace(
+                go.Scatter(
+                    x=data['Date'],
+                    y=data['RSI'],
+                    name='RSI'
+                ),
+                row=3, col=1
+            )
 
             # 更新布局
             fig.update_layout(
-                # 设置图表大小和边距
-                height=600,
-                margin=dict(
-                    l=50,    # 左边距
-                    r=50,    # 右边距
-                    t=100,   # 上边距，为标题和图例留出空间
-                    b=50     # 下边距
-                ),
-                
-                # 标题设置
-                title=dict(
-                    text="股票走势分析",
-                    font=dict(
-                        size=24,
-                        color='#2c3e50'
-                    ),
-                    x=0.5,          # 标题水平居中
-                    y=0.95,         # 标题垂直位置
-                    xanchor='center',
-                    yanchor='top'
-                ),
-                
-                # 图例设置
-                showlegend=True,
-                legend=dict(
-                    orientation="h",     # 水平放置
-                    yanchor="bottom",
-                    y=1.02,             # 位置略微调整
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(
-                        size=12,
-                        color='#2c3e50'
-                    ),
-                    bgcolor='rgba(255,255,255,0.8)',  # 半透明背景
-                    bordercolor='#E2E2E2',           # 边框颜色
-                    borderwidth=1                     # 边框宽度
-                ),
-                
-                # 背景颜色
-                paper_bgcolor='white',
-                plot_bgcolor='white',
-                
-                # 字体设置
-                font=dict(
-                    family="Arial, sans-serif",
-                    size=12,
-                    color='#2c3e50'
-                ),
-                
-                # 悬停框样式
-                hoverlabel=dict(
-                    bgcolor='white',
-                    font_size=12,
-                    font_family="Arial, sans-serif",
-                    bordercolor='#e0e0e0'
-                ),
-                
-                # 禁用工具栏
-                modebar_remove=['all']
+                title='股票分析图表',
+                xaxis_title='日期',
+                yaxis_title='价格',
+                template=self.chart_config.template,
+                height=self.chart_config.height
             )
 
-            # 更新X轴
-            fig.update_xaxes(
-                title_text="日期",
-                title_font=dict(size=14, color='#2c3e50'),
-                tickfont=dict(size=12, color='#2c3e50'),
-                gridcolor='#e0e0e0',
-                linecolor='#2c3e50',
-                showgrid=True,
-                rangeslider=dict(visible=False)  # 移除下方的滑动条
-            )
-
-            # 更新Y轴
-            fig.update_yaxes(
-                title_text="价格",
-                title_font=dict(size=14, color='#2c3e50'),
-                tickfont=dict(size=12, color='#2c3e50'),
-                gridcolor='#e0e0e0',
-                linecolor='#2c3e50',
-                showgrid=True,
-                side='left'        # Y轴显示在左侧
-            )
-
-            return fig
+            # 显示图表
+            st.plotly_chart(fig, use_container_width=True)
 
         except Exception as e:
-            st.error(f"创建图表时出错: {str(e)}")
-            return None
+            st.error(f"绘制图表时出错: {str(e)}")
