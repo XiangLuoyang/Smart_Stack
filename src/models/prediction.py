@@ -1,14 +1,48 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import typing
-from typing import Dict
+from typing import Dict, List, Tuple
 from scipy import stats
-import yfinance as yf
+import tushare as ts
 import streamlit as st
-from src.models.technical import TechnicalIndicatorCalculator
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
 
 class ReturnPredictor:
+    def __init__(self):
+        try:
+            ts.set_token('5d35cfa04f7c37346fc16dbf860b6e8ea05cb5593ee956fed1d9bbc3')
+            self.pro = ts.pro_api()
+            self.scaler = MinMaxScaler(feature_range=(0, 1))
+            self.model = self._build_lstm_model()
+        except Exception as e:
+            st.error(f"初始化Tushare API失败: {str(e)}")
+    
+    def _build_lstm_model(self) -> Sequential:
+        """构建LSTM模型"""
+        model = Sequential([
+            LSTM(50, return_sequences=True, input_shape=(60, 1)),
+            Dropout(0.2),
+            LSTM(50, return_sequences=False),
+            Dropout(0.2),
+            Dense(25),
+            Dense(1)
+        ])
+        model.compile(optimizer='adam', loss='mean_squared_error')
+        return model
+
+    def _prepare_data(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+        """准备LSTM模型训练数据"""
+        scaled_data = self.scaler.fit_transform(data[['close']].values)
+        x_train, y_train = [], []
+        
+        for i in range(60, len(scaled_data)):
+            x_train.append(scaled_data[i-60:i, 0])
+            y_train.append(scaled_data[i, 0])
+            
+        return np.array(x_train), np.array(y_train)
+
     def calculate_expected_return(
         self,
         ticker: str,
@@ -18,109 +52,102 @@ class ReturnPredictor:
     ) -> Dict[str, float]:
         """计算预期收益率和置信区间"""
         try:
-            # 获取历史数据 (缩短历史数据时间跨度为 1 年，以加快加载速度, 移除 start_date 参数)
-            stock = yf.Ticker(ticker)
-            hist_data = stock.history(period="1y")
+            # 获取历史数据
+            end_date = datetime.now()
+            hist_data = self.pro.daily(
+                ts_code=ticker,
+                start_date=start_date.strftime('%Y%m%d'),
+                end_date=end_date.strftime('%Y%m%d')
+            )
             
             if hist_data.empty:
                 return {'error': '无法获取历史数据'}
             
-            # 打印 hist_data 查看原始数据
-            print(f"Ticker: {ticker} - Hist Data:\n{hist_data}")
-
-            # 计算历史日收益率
-            returns = hist_data['Close'].pct_change().dropna()
+            # 准备数据
+            hist_data = hist_data.sort_values('trade_date')
+            x_train, y_train = self._prepare_data(hist_data)
             
-            # 检查 returns 是否为空
-            if returns.empty:
-                print(f"Ticker: {ticker} - Returns Series is empty.")
-                exp_return = np.nan # 直接赋值为 NaN
-            else:
-                # 计算预期收益率（年化）
-                exp_return = returns.mean() * 252 * 100
+            # 训练LSTM模型
+            self.model.fit(x_train, y_train, batch_size=32, epochs=10, verbose=0)
             
-            # 计算收益率的标准差
-            std_dev = returns.std() * np.sqrt(252)
+            # 准备预测数据
+            last_60_days = self.scaler.transform(hist_data['close'].values[-60:].reshape(-1, 1))
+            X_test = np.array([last_60_days])
             
-            # 计算置信区间
-            z_score = stats.norm.ppf((1 + confidence) / 2)
-            margin_of_error = z_score * std_dev * 100
+            # LSTM预测
+            lstm_pred = self.model.predict(X_test)
+            lstm_pred = self.scaler.inverse_transform(lstm_pred)
             
             # 计算技术指标
-            indicator_calculator = TechnicalIndicatorCalculator()
-            data_with_indicators = indicator_calculator.add_all_indicators(hist_data.copy()) # 避免修改原始数据
-
-            # 初始化技术指标平均值，防止 NameError
-            ma5_avg = np.nan
-            ma20_avg = np.nan
-            rsi_avg = np.nan
-            macd_avg = np.nan
-
-
-            # 计算技术指标的平均值 (简化处理，实际应用中可以更精细地分析)
-            ma5_avg = data_with_indicators['MA5'].mean() if not data_with_indicators['MA5'].empty else np.nan
-            ma20_avg = data_with_indicators['MA20'].mean() if not data_with_indicators['MA20'].empty else np.nan
-            rsi_avg = data_with_indicators['RSI'].mean() if not data_with_indicators['RSI'].empty else np.nan # RSI 中性值
-            macd_avg = data_with_indicators['MACD'].mean() if not data_with_indicators['MACD'].empty else np.nan
-
-            # 检查数据和技术指标计算结果
-            print(f"Ticker: {ticker}")
-            print(f"Hist Data Empty: {hist_data.empty}")
-            print(f"Returns: {returns}")
-            print(f"Exp Return: {exp_return}")
-            print(f"MA5 Avg: {ma5_avg}")
-            print(f"MA20 Avg: {ma20_avg}")
-            print(f"RSI Avg: {rsi_avg}")
-            print(f"MACD Avg: {macd_avg}")
-
-            # 综合指标权重 (这里权重可以根据实际情况调整)
-            weights = {
-                'history_return': 0.5,
-                'ma5': 0.1,
-                'ma20': 0.1,
-                'rsi': 0.15,
-                'macd': 0.15,
-            }
-
-            # 加权平均计算综合预期收益率
-            composite_exp_return = np.nanmean([ # 使用 np.nanmean 忽略 NaN 值
-                exp_return * weights['history_return'],
-                ma5_avg * weights['ma5'],
-                ma20_avg * weights['ma20'],
-                (rsi_avg - 50) * weights['rsi'], # RSI 偏离中性值程度
-                macd_avg * weights['macd']
-            ])
-
-
+            returns = hist_data['close'].pct_change().dropna()
+            volatility = returns.std() * np.sqrt(252)
+            momentum = (hist_data['close'].iloc[-1] / hist_data['close'].iloc[-20]) - 1
+            
+            # 综合预测
+            base_return = returns.mean() * 252 * 100
+            lstm_return = ((lstm_pred[0][0] / hist_data['close'].iloc[-1]) - 1) * 100
+            
+            # 加权平均（调整权重分配）
+            exp_return = (base_return * 0.4 + lstm_return * 0.6)
+            
+            # 计算动态置信区间
+            market_volatility = volatility * 100
+            z_score = stats.norm.ppf((1 + confidence) / 2)
+            margin_of_error = z_score * market_volatility
+            
             return {
-                'expected_return': composite_exp_return, # 使用综合预期收益率
-                'lower_bound': exp_return - margin_of_error, # 置信区间仍基于历史收益率
+                'expected_return': exp_return,
+                'lower_bound': exp_return - margin_of_error,
                 'upper_bound': exp_return + margin_of_error,
-                'forecast': hist_data['Close'].iloc[-days:].values
+                'forecast': hist_data['close'].iloc[-days:].values,
+                'lstm_confidence': lstm_pred[0][0],
+                'volatility': market_volatility
             }
         except Exception as e:
             return {'error': str(e)}
 
-    def get_top_stock_recommendations(self, tickers: typing.List[str], start_date: datetime, days: int, confidence: float) -> typing.List[typing.Tuple[str, float]]:
-        """
-        计算多个股票的预期收益率，并返回 TOP 10 推荐股票。
-
-        Args:
-            tickers: 股票代码列表。
-            start_date: 历史数据起始日期。
-            days: 预测天数。
-            confidence: 置信区间。
-
-        Returns:
-            包含 TOP 10 股票代码和预期收益率的列表，按预期收益率降序排列。
-        """
-        stock_returns = []
-        for ticker in tickers:
-            prediction_results = self.calculate_expected_return(ticker, start_date, days, confidence)
-            if 'error' not in prediction_results:
-                stock_returns.append((ticker, prediction_results['expected_return']))
-
-        # 按预期收益率降序排序
-        stock_returns.sort(key=lambda item: item[1], reverse=True)
-
-        return stock_returns[:10]  # 返回 TOP 10 股票
+    def get_stock_recommendations(
+        self,
+        tickers: list,
+        start_date: datetime,
+        days: int,
+        confidence: float
+    ) -> Dict[str, list]:
+        """获取股票推荐，包括最佳和最差表现"""
+        try:
+            results = []
+            total_stocks = len(tickers)
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, ticker in enumerate(tickers, 1):
+                progress = idx / total_stocks
+                progress_bar.progress(progress)
+                status_text.text(f'正在分析第 {idx}/{total_stocks} 支股票: {ticker}')
+                
+                prediction = self.calculate_expected_return(ticker, start_date, days, confidence)
+                if 'expected_return' in prediction:
+                    # 计算综合得分（调整权重分配）
+                    score = prediction['expected_return'] * 0.7 + \
+                           (1 / prediction['volatility']) * 30 * 0.3
+                    results.append((ticker, score))
+                    
+                    if len(results) >= 2:
+                        sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
+                        st.session_state.top_stocks = {
+                            'buy': [code for code, _ in sorted_results[:10]],
+                            'sell': [code for code, _ in sorted_results[-10:] if len(sorted_results) >= 10]
+                        }
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            results.sort(key=lambda x: x[1], reverse=True)
+            return {
+                'buy': results[:10],
+                'sell': results[-10:]
+            }
+        except Exception as e:
+            st.error(f"获取股票推荐失败: {str(e)}")
+            return {'buy': [], 'sell': []}
