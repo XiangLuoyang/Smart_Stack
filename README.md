@@ -11,6 +11,8 @@ Smart Stack是一个基于人工智能和技术分析的智能股票分析系统
 - **股票筛选**：基于多维度分析推荐买入和卖出标的
 
 ## 安装说明
+
+### 方式一：本地安装
 1. 克隆项目代码：
 ```bash
 git clone https://github.com/yourusername/Smart_Stack.git
@@ -24,6 +26,28 @@ pip install -r requirements.txt
 
 3. 配置Tushare API：
 在使用系统前，需要先注册[Tushare Pro](https://tushare.pro/)账号并获取API token。
+
+### 方式二：Docker部署
+1. 确保已安装Docker和Docker Compose
+
+2. 克隆项目并进入目录：
+```bash
+git clone https://github.com/yourusername/Smart_Stack.git
+cd Smart_Stack
+```
+
+3. 使用Docker Compose启动服务：
+```bash
+docker-compose up -d
+```
+
+4. 访问服务：
+打开浏览器访问 http://localhost:8501
+
+5. 停止服务：
+```bash
+docker-compose down
+```
 
 ## 使用说明
 1. 启动系统：
