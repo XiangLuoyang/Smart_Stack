@@ -15,7 +15,7 @@ Smart Stack是一个基于人工智能和技术分析的智能股票分析系统
 ### 方式一：本地安装
 1. 克隆项目代码：
 ```bash
-git clone https://github.com/yourusername/Smart_Stack.git
+git clone https://github.com/Xiangluoyang/Smart_Stack.git
 cd Smart_Stack
 ```
 
@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 2. 克隆项目并进入目录：
 ```bash
-git clone https://github.com/yourusername/Smart_Stack.git
+git clone https://github.com/XiangLuoyang/Smart_Stack.git
 cd Smart_Stack
 ```
 
