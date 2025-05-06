@@ -8,6 +8,9 @@ services:
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+      - ./src:/app/src
+      - ./smart-trade.py:/app/smart-trade.py
+      - ./requirements.txt:/app/requirements.txt
     environment:
       - PYTHONPATH=/app
     restart: unless-stopped
