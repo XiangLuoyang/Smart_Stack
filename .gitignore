@@ -29,3 +29,6 @@ env/
 # System Files
 .DS_Store
 Thumbs.db
+
+# Cache directories
+.cache/

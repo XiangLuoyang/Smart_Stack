@@ -16,6 +16,10 @@ from src.visualization.reports import ReportGenerator
 from src.llm_analysis.core import create_financial_analysis_crew # <-- 新增导入
 import plotly.graph_objects as go
 import plotly.io as pio
+import os 
+import json 
+import time # <-- 新增导入
+# datetime is already imported from datetime import datetime, date
 
 # 加载配置
 app_config = AppConfig()
@@ -36,7 +40,7 @@ report_generator = ReportGenerator()
 st.set_page_config(
     page_title=app_config.page_title,
     page_icon=app_config.page_icon,
-    layout=app_config.layout
+    layout="wide" # Changed from app_config.layout to a known valid literal
 )
 
 def update_top_stocks():
@@ -71,7 +75,39 @@ def update_top_stocks():
     st.session_state.sz100_calculated = True
     st.success("沪深100股票分析完成！")
 
+# Helper function for cache cleanup
+def cleanup_cache_by_mtime(cache_dir_path: str, days_to_keep: int):
+    if not os.path.isdir(cache_dir_path):
+        return
+    cutoff_time = time.time() - (days_to_keep * 24 * 60 * 60)
+    cleaned_count = 0
+    for filename in os.listdir(cache_dir_path):
+        file_path = os.path.join(cache_dir_path, filename)
+        try:
+            if os.path.isfile(file_path):
+                if os.path.getmtime(file_path) < cutoff_time:
+                    os.remove(file_path)
+                    cleaned_count += 1
+        except Exception as e:
+            # Log discreetly or handle as per app's logging strategy
+            # For a Streamlit app, st.warning might be too intrusive on every startup
+            print(f"Warning: Error cleaning up cache file {filename}: {str(e)}") 
+    if cleaned_count > 0:
+        print(f"Cleaned up {cleaned_count} old files from {cache_dir_path}.")
+
 def main():
+    # Define and create cache directories under .cache/
+    CACHE_BASE_DIR = ".cache"
+    ML_PREDS_CACHE_DIR = os.path.join(CACHE_BASE_DIR, "ml_predictions_cache")
+    LLM_REPORTS_CACHE_DIR = os.path.join(CACHE_BASE_DIR, "llm_reports_cache")
+    
+    os.makedirs(ML_PREDS_CACHE_DIR, exist_ok=True) # This creates .cache/ml_predictions_cache
+    os.makedirs(LLM_REPORTS_CACHE_DIR, exist_ok=True) # This creates .cache/llm_reports_cache
+
+    # Cleanup old cache files on startup
+    cleanup_cache_by_mtime(ML_PREDS_CACHE_DIR, 7)  # Keep for 7 days
+    cleanup_cache_by_mtime(LLM_REPORTS_CACHE_DIR, 7) # Keep for 7 days
+
     try:
         # 初始化工作区缓存
         if 'top_stocks' not in st.session_state:
@@ -151,8 +187,8 @@ def main():
                         st.dataframe(
                             buy_df,
                             column_config={
-                                "股票代码": st.column_config.TextColumn("股票代码", width=100),
-                                "预期涨幅": st.column_config.TextColumn("预期涨幅", width=100)
+                                "股票代码": st.column_config.TextColumn("股票代码", width="medium"), # Changed width
+                                "预期涨幅": st.column_config.TextColumn("预期涨幅", width="medium")  # Changed width
                             },
                             hide_index=True
                         )
@@ -171,8 +207,8 @@ def main():
                         st.dataframe(
                             sell_df,
                             column_config={
-                                "股票代码": st.column_config.TextColumn("股票代码", width=100),
-                                "预期跌幅": st.column_config.TextColumn("预期跌幅", width=100)
+                                "股票代码": st.column_config.TextColumn("股票代码", width="medium"), # Changed width
+                                "预期跌幅": st.column_config.TextColumn("预期跌幅", width="medium")  # Changed width
                             },
                             hide_index=True
                         )
@@ -247,51 +283,117 @@ def main():
                     
                     # 计算风险指标
                     risk_metrics = risk_calculator.calculate_risk_metrics(data)
-
-                    # --- Section 1: Machine Learning Analysis ---
-                    st.subheader(f"📈 {selected_stock} 机器学习分析与预测")
-                    try:
-                        # 计算预期收益率 (机器学习)
-                        prediction_results = return_predictor.calculate_expected_return(
-                            selected_stock,
-                            start_date, # 来自侧边栏
-                            period, # 来自侧边栏
-                            confidence_interval # 来自侧边栏
-                        )
-                        
-                        if prediction_results.get('error'):
-                            st.error(f"机器学习预测过程出错: {prediction_results['error']}")
-                        else:
-                            # 展示机器学习相关的图表
-                            chart_generator.plot_stock_analysis(data) # Updated call, removed second argument
-                            
-                            # 生成并展示机器学习的分析报告
-                            report_generator.generate_analysis_report(data, risk_metrics, prediction_results)
-                            
-                    except Exception as e_ml:
-                        st.error(f"执行机器学习分析时发生错误: {str(e_ml)}")
-                        import traceback
-                        traceback.print_exc()
                     
+                    today_str = datetime.now().strftime('%Y%m%d')
+
+                    # --- Section 1: Machine Learning Analysis with Caching ---
+                    st.subheader(f"📈 {selected_stock} 机器学习分析与预测")
+                    ml_cache_filename = f"{selected_stock}_{today_str}_preds.json"
+                    ml_cache_path = os.path.join(ML_PREDS_CACHE_DIR, ml_cache_filename)
+                    prediction_results = None
+
+                    if os.path.exists(ml_cache_path):
+                        try:
+                            with open(ml_cache_path, 'r', encoding='utf-8') as f:
+                                prediction_results = json.load(f)
+                            st.caption(f"机器学习预测结果加载自缓存 ({ml_cache_filename})")
+                        except Exception as e_load_ml:
+                            st.warning(f"加载机器学习缓存失败 ({ml_cache_filename}): {str(e_load_ml)}. 将重新计算。")
+                            prediction_results = None # Ensure re-calculation
+
+                    if prediction_results is None:
+                        st.caption("正在计算机器学习预测...")
+                        try:
+                            # Convert date to datetime if it's a date object
+                            start_datetime = datetime(start_date.year, start_date.month, start_date.day) if isinstance(start_date, date) and not isinstance(start_date, datetime) else start_date
+
+                            prediction_results = return_predictor.calculate_expected_return(
+                                selected_stock,
+                                start_datetime, # Use converted datetime
+                                period, # 来自侧边栏
+                                confidence_interval # 来自侧边栏
+                            )
+                            if not prediction_results.get('error'):
+                                try:
+                                    with open(ml_cache_path, 'w', encoding='utf-8') as f:
+                                        json.dump(prediction_results, f, indent=4, ensure_ascii=False)
+                                    st.caption(f"机器学习预测结果已缓存至 {ml_cache_filename}")
+                                except Exception as e_save_ml:
+                                    st.warning(f"保存机器学习缓存失败 ({ml_cache_filename}): {str(e_save_ml)}")
+                        except Exception as e_calc_ml:
+                            st.error(f"执行机器学习预测计算时出错: {str(e_calc_ml)}")
+                            import traceback
+                            traceback.print_exc()
+                            prediction_results = {'error': str(e_calc_ml)} # Ensure error is propagated
+
+                    # Display ML results if available
+                    if prediction_results and not prediction_results.get('error'):
+                        chart_generator.plot_stock_analysis(data)
+                        report_generator.generate_analysis_report(data, risk_metrics, prediction_results)
+                    elif prediction_results and prediction_results.get('error'):
+                        st.error(f"机器学习预测过程出错: {prediction_results['error']}")
+                    else:
+                        st.error("无法获取机器学习预测结果。")
+
                     st.markdown("---") # 分隔线
 
-                    # --- Section 2: LLM Deep Analysis ---
+                    # --- Section 2: LLM Deep Analysis with Caching ---
                     st.subheader(f"🤖 {selected_stock} LLM 深度分析报告")
-                    try:
-                        with st.spinner(f'正在为 {selected_stock} 生成 LLM 分析报告，请稍候...'):
-                            llm_report_markdown = create_financial_analysis_crew(selected_stock).kickoff()
-                        
-                        if llm_report_markdown:
-                            st.markdown(llm_report_markdown, unsafe_allow_html=True)
+                    llm_cache_filename = f"{selected_stock}_{today_str}_llm_report.md"
+                    llm_cache_path = os.path.join(LLM_REPORTS_CACHE_DIR, llm_cache_filename)
+                    
+                    final_llm_report_content = None # Variable to hold the report string for display
+
+                    if os.path.exists(llm_cache_path):
+                        try:
+                            with open(llm_cache_path, 'r', encoding='utf-8') as f:
+                                final_llm_report_content = f.read()
+                            st.caption(f"LLM分析报告加载自缓存 ({llm_cache_filename})")
+                        except Exception as e_load_llm:
+                            st.warning(f"加载LLM报告缓存失败 ({llm_cache_filename}): {str(e_load_llm)}. 将重新生成。")
+                            final_llm_report_content = None # Ensure re-generation
+                    
+                    if final_llm_report_content is None: # If not loaded from cache or cache load failed
+                        st.caption("正在生成LLM分析报告...")
+                        try:
+                            llm_crew_output = None
+                            with st.spinner(f'LLM 正在为 {selected_stock} 进行深度分析，请稍候...这可能需要几分钟。'):
+                                llm_crew_output = create_financial_analysis_crew(selected_stock).kickoff()
+                            
+                            if llm_crew_output and hasattr(llm_crew_output, 'raw') and llm_crew_output.raw:
+                                final_llm_report_content = llm_crew_output.raw
+                            elif llm_crew_output: # Fallback if .raw is not the primary or suitable output
+                                final_llm_report_content = str(llm_crew_output)
+                            
+                            if final_llm_report_content: # If we got some content
+                                try:
+                                    with open(llm_cache_path, 'w', encoding='utf-8') as f:
+                                        f.write(final_llm_report_content)
+                                    st.caption(f"LLM分析报告已缓存至 {llm_cache_filename}")
+                                except Exception as e_save_llm:
+                                    st.warning(f"保存LLM报告缓存失败 ({llm_cache_filename}): {str(e_save_llm)}")
+                            else: # No valid content from LLM
+                                st.warning("LLM执行完成，但未获取到有效报告文本。")
+                                final_llm_report_content = "LLM未能生成有效报告文本。" # Set placeholder/error
+
+                        except Exception as e_gen_llm:
+                            st.error(f"生成LLM分析报告时发生错误: {str(e_gen_llm)}")
+                            import traceback
+                            traceback.print_exc()
+                            final_llm_report_content = f"LLM报告生成失败: {str(e_gen_llm)}"
+
+                    # Display LLM report
+                    if final_llm_report_content:
+                        # Check if it's one of our placeholder/error messages before rendering as markdown
+                        if "LLM报告生成失败" in final_llm_report_content or "LLM未能生成有效报告文本" in final_llm_report_content:
+                            st.error(final_llm_report_content)
                         else:
-                            st.error(f"未能为 {selected_stock} 生成 LLM 分析报告。")
-                    except Exception as e_llm:
-                        st.error(f"生成LLM报告时发生错误: {str(e_llm)}")
-                        import traceback
-                        traceback.print_exc()
+                            st.markdown(final_llm_report_content, unsafe_allow_html=True)
+                    else: # Should ideally not be reached if logic above sets a placeholder
+                        st.error(f"未能为 {selected_stock} 获取或生成LLM分析报告。")
                         
-                except Exception as e_outer: # 外层 try-except 捕获数据加载等错误
-                    st.error(f"处理股票数据时发生错误: {str(e_outer)}")
+                except Exception as e_outer: # Outer try-except for data loading etc.
+                    st.error(f"处理股票 {selected_stock} 的数据时发生错误: {str(e_outer)}")
                     import traceback
                     traceback.print_exc()
         elif not selected_stock and analysis_mode == "单只股票分析":

@@ -9,11 +9,30 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 
+import os # Ensure os is imported for getenv
+from dotenv import load_dotenv # Ensure load_dotenv is available if not already top-level in this file
+
+# Load environment variables, useful if this module is run standalone or tested
+# If smart-trade.py (main app) already calls load_dotenv(), this might be redundant here,
+# but doesn't hurt.
+load_dotenv() 
+
 class ReturnPredictor:
     def __init__(self):
         try:
-            ts.set_token('5d35cfa04f7c37346fc16dbf860b6e8ea05cb5593ee956fed1d9bbc3')
-            self.pro = ts.pro_api()
+            tushare_token = os.getenv("TUSHARE_TOKEN")
+            if not tushare_token:
+                st.error("TUSHARE_TOKEN not found in environment variables. Please set it in your .env file.")
+                # Or raise ValueError, but st.error is consistent with existing error display here
+                # For robustness, might want to prevent further initialization if token is missing.
+                # However, ts.pro_api() might still work for some data without a token or with a default one.
+                # Let's proceed but the user should be aware.
+                print("Warning: TUSHARE_TOKEN not found. Tushare functionality may be limited.")
+                self.pro = ts.pro_api() # Attempt to initialize anyway or with a default token if Tushare handles it
+            else:
+                ts.set_token(tushare_token)
+                self.pro = ts.pro_api()
+            
             self.scaler = MinMaxScaler(feature_range=(0, 1))
             self.model = self._build_lstm_model()
         except Exception as e:
@@ -71,8 +90,11 @@ class ReturnPredictor:
             self.model.fit(x_train, y_train, batch_size=32, epochs=10, verbose=0)
             
             # 准备预测数据
-            last_60_days = self.scaler.transform(hist_data['close'].values[-60:].reshape(-1, 1))
-            X_test = np.array([last_60_days])
+            # Ensure we have a NumPy array before reshaping for the scaler
+            # Take the last 60 'close' prices, ensure it's a NumPy array, then reshape
+            prediction_input_data = np.asarray(hist_data['close'].values[-60:]).reshape(-1, 1)
+            last_60_days_scaled = self.scaler.transform(prediction_input_data)
+            X_test = np.array([last_60_days_scaled]) # Model expects a 3D array [samples, timesteps, features]
             
             # LSTM预测
             lstm_pred = self.model.predict(X_test)
@@ -100,11 +122,11 @@ class ReturnPredictor:
             margin_of_error_daily_pct = z_score * daily_volatility_pct
             
             return {
-                'expected_daily_return_pct': expected_daily_return_pct,
-                'daily_lower_bound_pct': expected_daily_return_pct - margin_of_error_daily_pct,
-                'daily_upper_bound_pct': expected_daily_return_pct + margin_of_error_daily_pct,
-                'lstm_predicted_next_price': lstm_pred[0][0], # 更准确的键名
-                'daily_volatility_pct': daily_volatility_pct
+                'expected_daily_return_pct': float(expected_daily_return_pct),
+                'daily_lower_bound_pct': float(expected_daily_return_pct - margin_of_error_daily_pct),
+                'daily_upper_bound_pct': float(expected_daily_return_pct + margin_of_error_daily_pct),
+                'lstm_predicted_next_price': float(lstm_pred[0][0]), # Ensure standard float for JSON
+                'daily_volatility_pct': float(daily_volatility_pct)
                 # 'forecast' 键被移除，因为它包含的是历史数据且未被图表生成器使用
             }
         except Exception as e:

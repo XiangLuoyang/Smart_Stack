@@ -14,21 +14,34 @@ class StockAnalysisReport(BaseModel):
     report_markdown: str
     # Add other structured fields if the LLM is expected to return them directly
 
-# Initialize DeepSeek LLM
-# Consider making this configurable or part of a broader LLM management setup if you have multiple LLMs
+# Initialize LLM based on environment variables
 def get_llm():
-    """Initializes and returns the DeepSeek LLM."""
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise ValueError("DEEPSEEK_API_KEY not found in environment variables. Please set it in your .env file.")
+    """Initializes and returns the LLM based on environment variables."""
     
+    model_name = os.getenv("LLM_MODEL_NAME", "deepseek/deepseek-chat") # Default to DeepSeek if not set
+    api_base_url = os.getenv("LLM_API_BASE_URL", "https://api.deepseek.com/v1") # Default to DeepSeek if not set
+    api_key = os.getenv("LLM_API_KEY") # API Key is mandatory
+
+    if not api_key:
+        raise ValueError("LLM_API_KEY not found in environment variables. Please set it in your .env file.")
+    if not model_name: # Should have a default, but good practice to check if user clears it
+        raise ValueError("LLM_MODEL_NAME not found in environment variables or code defaults. Please set it.")
+    if not api_base_url:
+        raise ValueError("LLM_API_BASE_URL not found in environment variables or code defaults. Please set it.")
+
+    # Default temperature and system prompt, can also be moved to .env if needed
+    temperature = float(os.getenv("LLM_TEMPERATURE", 0.3)) 
+    system_prompt_text = os.getenv("LLM_SYSTEM_PROMPT", "你是一个专业的中文金融分析师。请始终使用中文回答所有问题，保持专业性的同时确保语言表达清晰易懂。对于专业术语，在首次出现时提供中文解释。")
+
+    print(f"Initializing LLM with: Model={model_name}, BaseURL={api_base_url}, Temp={temperature}") # For debugging
+
     return LLM(
-        model="deepseek/deepseek-chat",
-        api_base="https://api.deepseek.com/v1",
+        model=model_name,
+        api_base=api_base_url,
         api_key=api_key,
-        temperature=0.3, # Adjust temperature for creativity vs. factuality
+        temperature=temperature,
         # timeout=120, # Optional: set a timeout for API calls
-        system_prompt="你是一个专业的中文金融分析师。请始终使用中文回答所有问题，保持专业性的同时确保语言表达清晰易懂。对于专业术语，在首次出现时提供中文解释。"
+        system_prompt=system_prompt_text
     )
 
 # Create agents and tasks for financial analysis
@@ -54,7 +67,7 @@ def create_financial_analysis_crew(symbol: str):
         llm=llm,
         tools=[stock_tool],
         verbose=True, # Set to False in production if too noisy
-        memory=True,  # Enables memory for the agent for conversational context
+        # memory=True,  # Removed for compatibility with older crewai versions like 0.119.0
         allow_delegation=False # Depending on complexity, you might allow delegation
     )
 
