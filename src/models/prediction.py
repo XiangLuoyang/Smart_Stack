@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any # Added Any
 from scipy import stats
 import tushare as ts
 import streamlit as st
@@ -47,10 +47,10 @@ class ReturnPredictor:
         self,
         ticker: str,
         start_date: datetime,
-        days: int,
+        days: int, # 'days' parameter is not currently used in the core return calculation logic after changes
         confidence: float
-    ) -> Dict[str, float]:
-        """计算预期收益率和置信区间"""
+    ) -> Dict[str, Any]: # Changed return type hint to accommodate error dicts
+        """计算预期日回报率和置信区间"""
         try:
             # 获取历史数据
             end_date = datetime.now()
@@ -78,33 +78,37 @@ class ReturnPredictor:
             lstm_pred = self.model.predict(X_test)
             lstm_pred = self.scaler.inverse_transform(lstm_pred)
             
-            # 计算技术指标
+            # 计算日回报率和日波动率
             returns = hist_data['close'].pct_change().dropna()
-            volatility = returns.std() * np.sqrt(252)
-            momentum = (hist_data['close'].iloc[-1] / hist_data['close'].iloc[-20]) - 1
+            if returns.empty:
+                return {'error': '无法计算回报率，数据不足'}
+
+            # 日均回报率 (百分比)
+            daily_historical_mean_return_pct = returns.mean() * 100
+            # 日波动率 (百分比)
+            daily_volatility_pct = returns.std() * 100
             
-            # 综合预测
-            base_return = returns.mean() * 252 * 100
-            lstm_return = ((lstm_pred[0][0] / hist_data['close'].iloc[-1]) - 1) * 100
+            # LSTM预测的下一日回报率 (百分比)
+            lstm_next_day_return_pct = ((lstm_pred[0][0] / hist_data['close'].iloc[-1]) - 1) * 100
             
-            # 加权平均（调整权重分配）
-            exp_return = (base_return * 0.4 + lstm_return * 0.6)
+            # 综合预期日回报率 (百分比)
+            # 注意：这里的权重 (0.4, 0.6) 是经验值，可以调整
+            expected_daily_return_pct = (daily_historical_mean_return_pct * 0.4 + lstm_next_day_return_pct * 0.6)
             
-            # 计算动态置信区间
-            market_volatility = volatility * 100
+            # 计算基于日波动率的置信区间
             z_score = stats.norm.ppf((1 + confidence) / 2)
-            margin_of_error = z_score * market_volatility
+            margin_of_error_daily_pct = z_score * daily_volatility_pct
             
             return {
-                'expected_return': exp_return,
-                'lower_bound': exp_return - margin_of_error,
-                'upper_bound': exp_return + margin_of_error,
-                'forecast': hist_data['close'].iloc[-days:].values,
-                'lstm_confidence': lstm_pred[0][0],
-                'volatility': market_volatility
+                'expected_daily_return_pct': expected_daily_return_pct,
+                'daily_lower_bound_pct': expected_daily_return_pct - margin_of_error_daily_pct,
+                'daily_upper_bound_pct': expected_daily_return_pct + margin_of_error_daily_pct,
+                'lstm_predicted_next_price': lstm_pred[0][0], # 更准确的键名
+                'daily_volatility_pct': daily_volatility_pct
+                # 'forecast' 键被移除，因为它包含的是历史数据且未被图表生成器使用
             }
         except Exception as e:
-            return {'error': str(e)}
+            return {'error': f"计算预期收益时发生错误: {str(e)}"}
 
     def get_stock_recommendations(
         self,
@@ -127,12 +131,27 @@ class ReturnPredictor:
                 status_text.text(f'正在分析第 {idx}/{total_stocks} 支股票: {ticker}')
                 
                 prediction = self.calculate_expected_return(ticker, start_date, days, confidence)
-                if 'expected_return' in prediction:
-                    # 计算综合得分（调整权重分配）
-                    score = prediction['expected_return'] * 0.7 + \
-                           (1 / prediction['volatility']) * 30 * 0.3
-                    results.append((ticker, score))
-                    
+                
+                # Check for error first
+                if prediction.get('error'):
+                    # Optionally log the error for this specific ticker
+                    # st.warning(f"Skipping {ticker} in recommendations due to error: {prediction['error']}")
+                    continue
+
+                # Use new keys and handle potential division by zero for volatility
+                if 'expected_daily_return_pct' in prediction and 'daily_volatility_pct' in prediction:
+                    daily_volatility = prediction['daily_volatility_pct']
+                    if daily_volatility != 0:
+                        score = prediction['expected_daily_return_pct'] * 0.7 + \
+                               (1 / daily_volatility) * 30 * 0.3 # Using new keys
+                        results.append((ticker, score))
+                    else:
+                        # Handle case where volatility is zero (e.g., constant price, rare)
+                        # Assign a neutral or skip, or handle as per financial logic
+                        # For now, we just append with a score that doesn't use inverse volatility part
+                        score = prediction['expected_daily_return_pct'] * 0.7 
+                        results.append((ticker, score))
+                        
                     if len(results) >= 2:
                         sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
                         st.session_state.top_stocks = {

@@ -13,6 +13,7 @@ from src.models.risk import RiskCalculator
 from src.models.prediction import ReturnPredictor
 from src.visualization.charts import ChartGenerator
 from src.visualization.reports import ReportGenerator
+from src.llm_analysis.core import create_financial_analysis_crew # <-- 新增导入
 import plotly.graph_objects as go
 import plotly.io as pio
 
@@ -124,8 +125,12 @@ def main():
                     max_value=date.today()
                 )
                 confidence_interval = st.slider("置信区间", 0.8, 0.99, 0.95)
-            else:
+            else: # analysis_mode is "沪深100股票分析"
                 selected_stock = None
+                # Provide default values for Pyright, even if not used in this path for ML prediction
+                period = 30 
+                start_date = datetime(2020, 1, 1)
+                confidence_interval = 0.95
 
         # 显示沪深100分析结果
         if analysis_mode in ["沪深100股票分析", "两者都进行"] and st.session_state.sz100_calculated:
@@ -242,27 +247,53 @@ def main():
                     
                     # 计算风险指标
                     risk_metrics = risk_calculator.calculate_risk_metrics(data)
+
+                    # --- Section 1: Machine Learning Analysis ---
+                    st.subheader(f"📈 {selected_stock} 机器学习分析与预测")
+                    try:
+                        # 计算预期收益率 (机器学习)
+                        prediction_results = return_predictor.calculate_expected_return(
+                            selected_stock,
+                            start_date, # 来自侧边栏
+                            period, # 来自侧边栏
+                            confidence_interval # 来自侧边栏
+                        )
+                        
+                        if prediction_results.get('error'):
+                            st.error(f"机器学习预测过程出错: {prediction_results['error']}")
+                        else:
+                            # 展示机器学习相关的图表
+                            chart_generator.plot_stock_analysis(data) # Updated call, removed second argument
+                            
+                            # 生成并展示机器学习的分析报告
+                            report_generator.generate_analysis_report(data, risk_metrics, prediction_results)
+                            
+                    except Exception as e_ml:
+                        st.error(f"执行机器学习分析时发生错误: {str(e_ml)}")
+                        import traceback
+                        traceback.print_exc()
                     
-                    # 计算预期收益率
-                    prediction_results = return_predictor.calculate_expected_return(
-                        selected_stock,
-                        start_date,
-                        period,
-                        confidence_interval
-                    )
-                    
-                    if prediction_results.get('error'):
-                        st.error(f"预测过程出错: {prediction_results['error']}")
-                        return
-                    
-                    # 展示图表
-                    chart_generator.plot_stock_analysis(data, prediction_results['forecast'])
-                    
-                    # 生成分析报告
-                    report_generator.generate_analysis_report(data, risk_metrics, prediction_results)
-                    
-                except Exception as e:
-                    st.error(f"处理数据时发生错误: {str(e)}")
+                    st.markdown("---") # 分隔线
+
+                    # --- Section 2: LLM Deep Analysis ---
+                    st.subheader(f"🤖 {selected_stock} LLM 深度分析报告")
+                    try:
+                        with st.spinner(f'正在为 {selected_stock} 生成 LLM 分析报告，请稍候...'):
+                            llm_report_markdown = create_financial_analysis_crew(selected_stock).kickoff()
+                        
+                        if llm_report_markdown:
+                            st.markdown(llm_report_markdown, unsafe_allow_html=True)
+                        else:
+                            st.error(f"未能为 {selected_stock} 生成 LLM 分析报告。")
+                    except Exception as e_llm:
+                        st.error(f"生成LLM报告时发生错误: {str(e_llm)}")
+                        import traceback
+                        traceback.print_exc()
+                        
+                except Exception as e_outer: # 外层 try-except 捕获数据加载等错误
+                    st.error(f"处理股票数据时发生错误: {str(e_outer)}")
+                    import traceback
+                    traceback.print_exc()
         elif not selected_stock and analysis_mode == "单只股票分析":
             st.info("👈 请在侧边栏选择一个股票代码开始分析")
             

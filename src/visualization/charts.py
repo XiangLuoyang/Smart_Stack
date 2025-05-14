@@ -9,7 +9,7 @@ class ChartGenerator:
     def __init__(self, chart_config: ChartConfig):
         self.chart_config = chart_config
 
-    def plot_stock_analysis(self, data: pd.DataFrame, forecast: np.ndarray):
+    def plot_stock_analysis(self, data: pd.DataFrame): # Removed 'forecast: np.ndarray' argument
         """绘制股票分析图表"""
         try:
             # 创建子图
