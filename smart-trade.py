@@ -65,6 +65,10 @@ def update_top_stocks():
     # 清除进度条和状态文本
     progress_bar.empty()
     status_text.empty()
+    
+    # 设置标志，表示已完成计算
+    st.session_state.sz100_calculated = True
+    st.success("沪深100股票分析完成！")
 
 def main():
     try:
@@ -75,41 +79,58 @@ def main():
                 'sell': []
             }
         
-        # 添加页面加载时间戳控制缓存
-        if 'page_load_time' not in st.session_state:
-            st.session_state.page_load_time = time.time()
-            st.session_state.update_started = False
+        # 添加沪深100计算状态标志
+        if 'sz100_calculated' not in st.session_state:
+            st.session_state.sz100_calculated = False
         
         st.title(app_config.page_title)
         
         # 侧边栏配置
         with st.sidebar:
             st.header("配置参数")
-            tickers = data_loader.get_sz100_tickers()
-            if not tickers:
-                st.error("无法获取股票列表")
-                return
-                
-            selected_stock = st.selectbox(
-                "选择股票代码",
-                tickers,
-                index=0 if tickers else None
+            
+            # 添加功能选择区域
+            st.subheader("功能选择")
+            analysis_mode = st.radio(
+                "选择分析模式",
+                ["单只股票分析", "沪深100股票分析", "两者都进行"]
             )
             
-            st.subheader("预测参数")
-            period = st.slider("预测天数", 1, 365, 30)
-            start_date = st.date_input(
-                "选择起始日期",
-                value=datetime(2020, 1, 1),
-                min_value=datetime(2015, 1, 1),
-                max_value=date.today()
-            )
-            confidence_interval = st.slider("置信区间", 0.8, 0.99, 0.95)
+            # 如果选择了沪深100分析或两者都进行，显示计算按钮
+            if analysis_mode in ["沪深100股票分析", "两者都进行"]:
+                if st.button("开始计算沪深100股票") or (analysis_mode == "两者都进行" and not st.session_state.sz100_calculated):
+                    update_top_stocks()
+            
+            # 股票选择区域
+            if analysis_mode in ["单只股票分析", "两者都进行"]:
+                st.subheader("股票选择")
+                tickers = data_loader.get_sz100_tickers()
+                if not tickers:
+                    st.error("无法获取股票列表")
+                    return
+                    
+                selected_stock = st.selectbox(
+                    "选择股票代码",
+                    tickers,
+                    index=0 if tickers else None
+                )
+                
+                st.subheader("预测参数")
+                period = st.slider("预测天数", 1, 365, 30)
+                start_date = st.date_input(
+                    "选择起始日期",
+                    value=datetime(2020, 1, 1),
+                    min_value=datetime(2015, 1, 1),
+                    max_value=date.today()
+                )
+                confidence_interval = st.slider("置信区间", 0.8, 0.99, 0.95)
+            else:
+                selected_stock = None
 
-        if selected_stock:
-            # 工作区展示逻辑
+        # 显示沪深100分析结果
+        if analysis_mode in ["沪深100股票分析", "两者都进行"] and st.session_state.sz100_calculated:
             with st.container():
-                st.subheader("💼 智能工作区")
+                st.subheader("💼 沪深100智能分析")
                 
                 # 显示缓存中的Top10股票
                 col1, col2 = st.columns(2)
@@ -118,8 +139,8 @@ def main():
                     if st.session_state.top_stocks['buy']:
                         # 创建买入推荐表格数据
                         buy_data = {
-                            '股票代码': [code for code, ret in st.session_state.top_stocks['buy'][:10]],
-                            '预期涨幅': [f"{ret:.2f}%" for code, ret in st.session_state.top_stocks['buy'][:10]]
+                            '股票代码': [code for code in st.session_state.top_stocks['buy'][:10]],
+                            '预期涨幅': ["--" for _ in st.session_state.top_stocks['buy'][:10]]
                         }
                         buy_df = pd.DataFrame(buy_data)
                         st.dataframe(
@@ -131,15 +152,15 @@ def main():
                             hide_index=True
                         )
                     else:
-                        st.info("正在计算推荐股票，请稍候...")
+                        st.info("暂无推荐股票，请点击计算按钮")
                 
                 with col2:
                     st.markdown("### 🚨 建议谨慎卖出")
                     if st.session_state.top_stocks['sell']:
                         # 创建卖出推荐表格数据
                         sell_data = {
-                            '股票代码': [code for code, ret in st.session_state.top_stocks['sell'][:10]],
-                            '预期跌幅': [f"{ret:.2f}%" for code, ret in st.session_state.top_stocks['sell'][:10]]
+                            '股票代码': [code for code in st.session_state.top_stocks['sell'][:10]],
+                            '预期跌幅': ["--" for _ in st.session_state.top_stocks['sell'][:10]]
                         }
                         sell_df = pd.DataFrame(sell_data)
                         st.dataframe(
@@ -151,10 +172,10 @@ def main():
                             hide_index=True
                         )
                     else:
-                        st.info("正在计算推荐股票，请稍候...")
+                        st.info("暂无推荐股票，请点击计算按钮")
                 
                 # 截图下载按钮
-                if st.button("📸 保存工作区截图"):
+                if st.button("📸 保存沪深100分析截图"):
                     try:
                         # 创建一个新的图表用于截图
                         fig = go.Figure()
@@ -162,7 +183,7 @@ def main():
                         # 添加买入推荐数据
                         if st.session_state.top_stocks['buy']:
                             buy_text = "强烈推荐买入:\n" + "\n".join(
-                                [f"{code}: {ret:.2f}%" for code, ret in st.session_state.top_stocks['buy'][:10]]
+                                [f"{code}" for code in st.session_state.top_stocks['buy'][:10]]
                             )
                             fig.add_annotation(
                                 text=buy_text,
@@ -174,7 +195,7 @@ def main():
                         # 添加卖出推荐数据
                         if st.session_state.top_stocks['sell']:
                             sell_text = "建议谨慎卖出:\n" + "\n".join(
-                                [f"{code}: {ret:.2f}%" for code, ret in st.session_state.top_stocks['sell'][:10]]
+                                [f"{code}" for code in st.session_state.top_stocks['sell'][:10]]
                             )
                             fig.add_annotation(
                                 text=sell_text,
@@ -185,7 +206,7 @@ def main():
                         
                         # 设置图表布局
                         fig.update_layout(
-                            title="智能工作区截图",
+                            title="沪深100分析截图",
                             showlegend=False,
                             width=800,
                             height=600
@@ -194,11 +215,15 @@ def main():
                         # 生成截图
                         img_bytes = fig.to_image(format="png")
                         b64 = base64.b64encode(img_bytes).decode()
-                        href = f'<a href="data:image/png;base64,{b64}" download="workarea_snapshot.png">点击下载截图</a>'
+                        href = f'<a href="data:image/png;base64,{b64}" download="sz100_snapshot.png">点击下载截图</a>'
                         st.markdown(href, unsafe_allow_html=True)
                         st.success("截图已生成，请点击链接下载")
                     except Exception as e:
                         st.error(f"生成截图时出错: {str(e)}")
+
+        # 单只股票分析
+        if selected_stock and analysis_mode in ["单只股票分析", "两者都进行"]:
+            st.subheader(f"📊 {selected_stock} 个股分析")
             
             with st.spinner('正在加载数据...'):
                 # 加载和处理数据
@@ -217,19 +242,6 @@ def main():
                     
                     # 计算风险指标
                     risk_metrics = risk_calculator.calculate_risk_metrics(data)
-                    
-                    # 在页面加载时启动异步更新Top10股票
-                    if not st.session_state.update_started:
-                        st.session_state.update_started = True
-                        # 获取股票推荐列表
-                        recommendations = return_predictor.get_stock_recommendations(
-                            tickers,
-                            start_date,
-                            period,
-                            confidence_interval
-                        )
-                        st.session_state.top_stocks = recommendations
-                        st.rerun()
                     
                     # 计算预期收益率
                     prediction_results = return_predictor.calculate_expected_return(
@@ -251,11 +263,11 @@ def main():
                     
                 except Exception as e:
                     st.error(f"处理数据时发生错误: {str(e)}")
-        else:
+        elif not selected_stock and analysis_mode == "单只股票分析":
             st.info("👈 请在侧边栏选择一个股票代码开始分析")
             
     except Exception as e:
         st.error(f"程序运行出错: {str(e)}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
