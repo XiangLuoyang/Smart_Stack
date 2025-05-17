@@ -29,6 +29,9 @@ RUN conda create -n smart_stack python=3.10 -y && \
     conda init bash && \
     echo "conda activate smart_stack" >> ~/.bashrc
 
+# 安装 Mamba 到 base 环境以加速后续的包安装
+RUN conda install -n base -c conda-forge mamba -y
+
 # 设置工作目录
 WORKDIR /app
 
@@ -68,17 +71,23 @@ COPY envconf .
 
 # 使用conda安装主要依赖
 SHELL ["/bin/bash", "-c"]
+
+# 配置 pip 国内源 (例如清华大学源)
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
-    conda install -c conda-forge -y pandas numpy scipy matplotlib seaborn pytz requests
+    pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
-    conda install -c anaconda -y tensorflow
+    mamba install -c conda-forge -y pandas numpy scipy matplotlib seaborn pytz requests
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
-    conda install -c conda-forge -y scikit-learn plotly ta-lib
+    mamba install -c anaconda -y tensorflow
+
+RUN source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate smart_stack && \
+    mamba install -c conda-forge -y scikit-learn plotly ta-lib
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
