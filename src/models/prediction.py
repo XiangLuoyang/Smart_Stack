@@ -6,8 +6,15 @@ from scipy import stats
 import tushare as ts
 import streamlit as st
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+import tensorflow as tf
+# from tensorflow.keras.models import Sequential # 旧的导入方式
+# from tensorflow.keras.layers import LSTM, Dense, Dropout # 旧的导入方式
+
+# 使用 tf.keras 访问 Keras API
+Sequential = tf.keras.models.Sequential
+LSTM = tf.keras.layers.LSTM
+Dense = tf.keras.layers.Dense
+Dropout = tf.keras.layers.Dropout
 
 import os # Ensure os is imported for getenv
 from dotenv import load_dotenv # Ensure load_dotenv is available if not already top-level in this file

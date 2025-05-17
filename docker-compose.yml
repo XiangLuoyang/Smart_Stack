@@ -11,6 +11,8 @@ services:
       - ./src:/app/src
       - ./smart-trade.py:/app/smart-trade.py
       - ./requirements.txt:/app/requirements.txt
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
     restart: unless-stopped
