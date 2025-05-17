@@ -105,17 +105,42 @@ pip install -r requirements.txt
 ### 6. (可选) Docker 部署
 如果您希望通过 Docker 部署：
 1.  确保已安装 Docker 和 Docker Compose。
-2.  **准备 `.env` 文件**：在执行 Docker 命令前，请确保已按照步骤5在项目根目录根据 `envconf` 创建并正确配置了您的 `.env` 文件。Docker Compose 配置 (`docker-compose.yml`) 通常会引用此 `.env` 文件来注入环境变量。
-3.  **Dockerfile TA-Lib**: 您需要确保项目中的 `Dockerfile` 包含安装 TA-Lib C语言库的步骤（类似于步骤3中对应Linux的命令）。例如，在 `Dockerfile` 合适的位置添加：
-    ```dockerfile
-    RUN apt-get update && apt-get install -y libta-lib-dev && rm -rf /var/lib/apt/lists/*
-    ```
+2.  **准备 `.env` 文件**：在执行 Docker 命令前，请确保已按照步骤5在项目根目录根据 `envconf` 创建并正确配置了您的 `.env` 文件。Docker Compose 配置 (`docker-compose.yml`) 会通过 `env_file` 指令引用此 `.env` 文件来注入环境变量。
+3.  **Dockerfile 与 TA-Lib**: 项目中提供的 `Dockerfile` 已经内置了 TA-Lib C 语言库的完整安装步骤（通过源码编译，兼容多种架构）。您**无需**手动修改 `Dockerfile` 来添加 TA-Lib 安装指令。
 4.  在项目根目录运行（如果首次运行或Dockerfile有改动，建议加上 `--build`）：
     ```bash
     docker-compose up -d --build 
     ```
+    如果您希望使用特定的 `Dockerfile`（例如，如果您有多个 Dockerfile 版本），并且您的 `docker-compose.yml` 中没有明确指定 `build.dockerfile`，您可能需要先手动构建镜像，例如：
+    ```bash
+    # 假设您的主 Dockerfile 名为 Dockerfile.conda
+    # docker build -f Dockerfile.conda -t smart-stack:custom .
+    # 然后在 docker-compose.yml 中使用 image: smart-stack:custom
+    ```
+    通常情况下，如果您的 `docker-compose.yml` 中的 `build` 指令指向 `.` (当前目录)，并且项目根目录下有 `Dockerfile`，则 `docker-compose up --build` 会自动使用它。
 5.  访问服务：浏览器打开 `http://localhost:8501` (或其他在 `docker-compose.yml` 中配置的端口)。
 6.  停止服务：`docker-compose down`。
+7.  **更新应用 (当源代码更新后)**：
+    如果您本地的源代码（例如通过 `git pull`）更新了，并且您希望 Docker 容器也使用最新的代码，请按照以下步骤操作：
+    a.  **获取最新代码**：确保您的本地项目目录已更新到最新的源代码版本。
+        ```bash
+        # 例如，如果您使用 Git 管理代码
+        # git pull origin main  # 或者您使用的分支名
+        ```
+    b.  **重新构建镜像**：这一步会将最新的代码和依赖（如果 `Dockerfile` 或 `requirements.txt` 有变动）打包到新的 Docker 镜像中。
+        ```bash
+        docker-compose build
+        ```
+        或者，如果您在启动时总是使用 `--build` 选项，也可以直接执行下一步。
+    c.  **重新启动服务**：`docker-compose` 会使用新构建的镜像来启动容器。
+        ```bash
+        docker-compose up -d
+        ```
+        如果您在上一步没有单独执行 `build`，确保在这里加上 `--build`：
+        ```bash
+        # docker-compose up -d --build
+        ```
+    这样，您的 Docker 化应用就会更新到最新版本。
 
 ## 使用说明
 1.  确保所有环境准备、依赖安装和 `.env` 文件配置均已完成。
