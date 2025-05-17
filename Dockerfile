@@ -27,8 +27,6 @@ RUN conda create -n smart_stack python=3.10 -y && \
     conda init bash && \
     echo "conda activate smart_stack" >> ~/.bashrc
 
-# 安装 Mamba 到 base 环境以加速后续的包安装
-RUN conda install -n base -c conda-forge mamba -y
 
 # 设置工作目录
 WORKDIR /app
