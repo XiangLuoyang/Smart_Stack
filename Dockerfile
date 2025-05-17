@@ -54,10 +54,6 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
-    mamba install -c conda-forge -y plotly ta-lib
-
-RUN source /opt/conda/etc/profile.d/conda.sh && \
-    conda activate smart_stack && \
     pip install --no-cache-dir -r requirements.txt
 
 # 设置环境变量

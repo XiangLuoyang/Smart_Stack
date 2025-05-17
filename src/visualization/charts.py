@@ -74,14 +74,14 @@ class ChartGenerator:
             )
 
             # 添加RSI指标
-            fig.add_trace(
-                go.Scatter(
-                    x=data['Date'],
-                    y=data['RSI'],
-                    name='RSI'
-                ),
-                row=3, col=1
-            )
+            #fig.add_trace(
+            #    go.Scatter(
+            #        x=data['Date'],
+            #        y=data['RSI'],
+            #        name='RSI'
+            #    ),
+            #    row=3, col=1
+            #)
 
             # 更新布局
             fig.update_layout(
