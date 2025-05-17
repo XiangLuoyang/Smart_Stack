@@ -9,9 +9,7 @@ RUN echo "deb https://mirrors.aliyun.com/debian/ bookworm main contrib non-free 
 RUN apt-get update && apt-get install -y \
     wget \
     pkg-config \
-    libhdf5-dev \
     build-essential \
-    hdf5-tools \
     curl \
     ca-certificates \
     automake \
@@ -35,33 +33,6 @@ RUN conda install -n base -c conda-forge mamba -y
 # 设置工作目录
 WORKDIR /app
 
-# 安装TA-Lib C库
-RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz && \
-    tar -xzf ta-lib-0.4.0-src.tar.gz && \
-    cd ta-lib/ && \
-    # 更新config.guess和config.sub以支持ARM64架构
-    mkdir -p config && \
-    cd config && \
-    wget http://git.savannah.gnu.org/cgit/config.git/plain/config.guess && \
-    wget http://git.savannah.gnu.org/cgit/config.git/plain/config.sub && \
-    cd .. && \
-    chmod +x config/config.guess config/config.sub && \
-    cp config/config.guess . && \
-    cp config/config.sub . && \
-    ./configure --prefix=/usr/local && \
-    make && \
-    make install && \
-    ldconfig && \
-    # 添加 ldconfig 命令
-    cd .. && \
-    rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
-
-# 设置TA-Lib环境变量
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
-ENV CFLAGS="-I/usr/local/include"
-ENV LDFLAGS="-L/usr/local/lib"
-
 # 复制项目文件
 COPY requirements.txt .
 COPY src/ ./src/
@@ -83,11 +54,7 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
-    mamba install -c anaconda -y tensorflow
-
-RUN source /opt/conda/etc/profile.d/conda.sh && \
-    conda activate smart_stack && \
-    mamba install -c conda-forge -y scikit-learn plotly ta-lib
+    mamba install -c conda-forge -y plotly ta-lib
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
