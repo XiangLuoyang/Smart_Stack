@@ -50,7 +50,7 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
-    pip install -c conda-forge -y pandas numpy scipy matplotlib seaborn pytz requests
+    conda install -y pandas numpy scipy matplotlib seaborn pytz requests
 
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate smart_stack && \
