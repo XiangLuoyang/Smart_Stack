@@ -1,5 +1,5 @@
-# 使用Python 3.8作为基础镜像
-FROM python:3.8-slim
+# 使用Python 3.9作为基础镜像
+FROM python:3.9-slim
 
 # 配置apt国内源
 RUN echo "deb https://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \

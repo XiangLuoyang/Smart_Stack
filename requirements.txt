@@ -17,4 +17,4 @@ python-dotenv>=1.0.0
 pydantic>=2.5.0
 yfinance>=0.2.35
 # Added for advanced technical analysis
-TA-Lib
+#TA-Lib
