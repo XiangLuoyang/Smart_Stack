@@ -1,10 +1,12 @@
 import pandas as pd
 from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
-import yfinance as yf  # 切换到YFinance
 import streamlit as st
 from src.config.settings import DataConfig
 import os
+
+# 导入智能数据源
+from .smart_loader import get_smart_loader
 
 class StockDataLoader:
     def __init__(self, data_config: DataConfig):
@@ -12,8 +14,9 @@ class StockDataLoader:
         self._cache = {}
         self._cache_timeout = 300  # 缓存超时时间（秒）
         
-        # YFinance无需API Token初始化
-        st.info("数据源已切换到YFinance，支持A股、美股、港股")
+        # 使用智能数据源
+        self.smart_loader = get_smart_loader(data_config)
+        st.info("📊 使用智能数据源 - 自动选择最佳数据源")
 
     def get_sz100_tickers(self) -> List[str]:
         """从本地CSV文件获取深证100指数成分股列表"""
@@ -28,54 +31,52 @@ class StockDataLoader:
             st.error(f"读取股票列表失败: {str(e)}")
             return []
 
-    def load_stock_data(self, stock_code: str) -> Tuple[pd.DataFrame, str]:
-        """使用YFinance加载股票数据（支持A股、美股、港股）"""
+    def load_stock_data(self, stock_code: str, period: str = "daily",
+                        start_date: Optional[str] = None,
+                        end_date: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
+        """
+        智能加载股票数据（支持多数据源自动切换）
+        
+        Args:
+            stock_code: 股票代码
+            period: 数据周期 (daily, weekly, monthly)
+            start_date: 开始日期 (YYYYMMDD)
+            end_date: 结束日期 (YYYYMMDD)
+            
+        Returns:
+            (DataFrame, 标准化代码)
+        """
         try:
             # 验证股票代码格式
             if not stock_code:
                 st.warning("股票代码不能为空")
                 return pd.DataFrame(), ''
             
-            # 标准化股票代码格式
-            standardized_code = self._standardize_stock_code(stock_code)
-            
             # 检查缓存
-            cache_key = f"{standardized_code}_{datetime.now().date()}"
+            cache_key = f"{stock_code}_{period}_{start_date}_{end_date}"
             if cache_key in self._cache:
                 cache_data, cache_time = self._cache[cache_key]
                 if (datetime.now() - cache_time).seconds < self._cache_timeout:
-                    st.info(f"使用缓存数据: {standardized_code}")
-                    return cache_data, standardized_code
+                    st.info(f"📦 使用缓存数据: {stock_code}")
+                    return cache_data.copy(), stock_code
 
-            # 获取股票数据
-            st.info(f"正在获取 {standardized_code} 数据...")
-            
-            # 使用YFinance获取数据
-            ticker = yf.Ticker(standardized_code)
-            
-            # 获取1年历史数据
-            df = ticker.history(period="1y")
+            # 使用智能数据源获取数据
+            df, standardized_code, source = self.smart_loader.load_stock_data(
+                stock_code, period, start_date, end_date
+            )
             
             if df.empty:
-                st.error(f"无法获取股票 {standardized_code} 的数据，请检查代码格式")
-                # 尝试备用格式
-                alt_code = self._try_alternative_format(stock_code)
-                if alt_code and alt_code != standardized_code:
-                    st.info(f"尝试备用格式: {alt_code}")
-                    return self.load_stock_data(alt_code)
+                st.error(f"❌ 无法获取股票 {stock_code} 的数据")
                 return pd.DataFrame(), standardized_code
 
-            # 标准化数据格式
-            df = self._standardize_yfinance_data(df, standardized_code)
-            
             # 更新缓存
-            self._cache[cache_key] = (df, datetime.now())
+            self._cache[cache_key] = (df.copy(), datetime.now())
             
-            st.success(f"成功获取到 {standardized_code} 的历史数据，共{len(df)}条记录")
+            st.success(f"✅ 成功获取到 {standardized_code} 的历史数据 ({source})，共{len(df)}条记录")
             return df, standardized_code
 
         except Exception as e:
-            st.error(f"加载数据失败: {str(e)}")
+            st.error(f"❌ 加载数据失败: {str(e)}")
             return pd.DataFrame(), ''
 
     def _standardize_stock_code(self, stock_code: str) -> str:
@@ -163,35 +164,22 @@ class StockDataLoader:
     def get_market_info(self, stock_code: str) -> dict:
         """获取股票市场信息"""
         try:
-            standardized_code = self._standardize_stock_code(stock_code)
-            ticker = yf.Ticker(standardized_code)
-            info = ticker.info
-            
-            return {
-                'symbol': standardized_code,
-                'name': info.get('longName', info.get('shortName', 'N/A')),
-                'market': self._detect_market(standardized_code),
-                'currency': info.get('currency', 'N/A'),
-                'timezone': info.get('exchangeTimezoneName', 'N/A')
-            }
+            info, source = self.smart_loader.get_market_info(stock_code)
+            if info:
+                info['data_source'] = source
+                return info
+            else:
+                return {
+                    'symbol': stock_code,
+                    'error': '无法获取市场信息',
+                    'data_source': 'none'
+                }
         except Exception as e:
             return {
                 'symbol': stock_code,
-                'error': str(e)
+                'error': str(e),
+                'data_source': 'error'
             }
-
-    def _detect_market(self, stock_code: str) -> str:
-        """检测股票所属市场"""
-        if stock_code.endswith('.SZ'):
-            return '深圳证券交易所'
-        elif stock_code.endswith('.SS') or stock_code.endswith('.SH'):
-            return '上海证券交易所'
-        elif stock_code.endswith('.HK'):
-            return '香港交易所'
-        elif '.' not in stock_code and len(stock_code) <= 5:
-            return '纽约证券交易所/NASDAQ'
-        else:
-            return '未知市场'
 
     def batch_load_stock_data(self, stock_codes: List[str]) -> List[Tuple[pd.DataFrame, str]]:
         """批量加载多只股票数据"""
