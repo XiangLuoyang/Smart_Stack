@@ -1,6 +1,64 @@
-LLM_MODEL_NAME="your model name"
-LLM_API_BASE_URL="your base url"
-LLM_API_KEY="your key" 
-LLM_TEMPERATURE="0.3" # 可选
+# Smart Stack 环境变量配置模板
+# 复制此文件为 .env 并填写您的实际配置
 
-TUSHARE_TOKEN="your tushare token"
+# ======================
+# LLM 配置 (必需)
+# ======================
+
+# LLM 模型名称
+# 示例: "deepseek/deepseek-chat", "openai/qwen-turbo", "gpt-4"
+LLM_MODEL_NAME="your-model-name"
+
+# LLM API 基础URL
+# 示例: "https://api.deepseek.com/v1", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+LLM_API_BASE_URL="your-api-base-url"
+
+# LLM API 密钥 (必需)
+# 从您的LLM服务商获取
+LLM_API_KEY="your-api-key-here"
+
+# LLM 温度参数 (可选，默认0.3)
+# 控制输出随机性：0.0-确定性，1.0-创造性
+LLM_TEMPERATURE="0.3"
+
+# LLM 系统提示词 (可选)
+# 自定义分析师的角色和风格
+# LLM_SYSTEM_PROMPT="你是一位专注于A股市场的量化分析师，请提供专业、客观的分析报告。"
+
+# ======================
+# 数据源配置 (必需)
+# ======================
+
+# Tushare Pro API Token (必需)
+# 注册地址: https://tushare.pro/
+TUSHARE_TOKEN="your-tushare-token-here"
+
+# ======================
+# 配置示例
+# ======================
+
+# 示例1: DeepSeek
+# LLM_MODEL_NAME="deepseek/deepseek-chat"
+# LLM_API_BASE_URL="https://api.deepseek.com/v1"
+# LLM_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+# TUSHARE_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 示例2: 阿里云通义千问 (OpenAI兼容模式)
+# LLM_MODEL_NAME="openai/qwen-turbo"
+# LLM_API_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+# LLM_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+# TUSHARE_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 示例3: OpenAI
+# LLM_MODEL_NAME="gpt-4"
+# LLM_API_BASE_URL="https://api.openai.com/v1"
+# LLM_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+# TUSHARE_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# ======================
+# 重要提示
+# ======================
+# 1. 请务必将所有 "your-xxx" 替换为真实值
+# 2. LLM_API_KEY 和 TUSHARE_TOKEN 是必需配置
+# 3. 如果使用OpenAI兼容端点，模型名可能需要加 "openai/" 前缀
+# 4. 此文件会被 .gitignore 忽略，确保API密钥安全
