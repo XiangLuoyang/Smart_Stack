@@ -1,0 +1,6 @@
+LLM_MODEL_NAME="your model name"
+LLM_API_BASE_URL="your base url"
+LLM_API_KEY="your key" 
+LLM_TEMPERATURE="0.3" # 可选
+
+TUSHARE_TOKEN="your tushare token"

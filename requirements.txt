@@ -6,7 +6,6 @@
 # ======================
 pandas>=2.1.0          # 数据分析与处理
 numpy>=1.20.0          # 数值计算
-scipy>=1.7.0           # 科学计算
 
 # ======================
 # 机器学习与深度学习
@@ -27,11 +26,9 @@ plotly>=5.18.0         # 交互式图表
 streamlit>=1.31.0      # Web应用框架
 
 # ======================
-# 金融数据与API
+# 金融数据源 (YFinance)
 # ======================
-tushare>=1.2.89        # A股数据API
-yfinance>=0.2.35       # 美股数据API (备用)
-pandas-ta>=0.3.14b0    # 技术指标计算 (备用)
+yfinance>=0.2.35       # 股票数据API (A股、美股、港股)
 
 # ======================
 # LLM与AI代理
@@ -44,23 +41,21 @@ pydantic>=2.5.0        # 数据验证
 # 工具与工具库
 # ======================
 requests>=2.26.0       # HTTP请求库
-pytz>=2021.3           # 时区处理
 
 # ======================
-# 重要说明
+# 重要更新说明
 # ======================
-# 1. TA-Lib 需要单独安装系统级C库
-#    macOS: brew install ta-lib
-#    Ubuntu: sudo apt-get install libta-lib-dev
-#    Windows: 从 https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib 下载whl文件
-#
-# 2. 安装命令: pip install -r requirements.txt
-#
-# 3. 如果遇到版本冲突，可以尝试:
-#    pip install --upgrade pip
-#    pip install --no-deps TA-Lib  # 如果TA-Lib安装失败
-#
-# 4. 推荐使用虚拟环境:
+# 支持A股、美股、港股，开箱即用
+
+# ======================
+# 安装说明
+# ======================
+# 1. 创建虚拟环境（推荐）:
 #    python3 -m venv .venv
 #    source .venv/bin/activate  # macOS/Linux
 #    .venv\Scripts\activate     # Windows
+#
+# 2. 安装依赖:
+#    pip install -r requirements.txt
+#
+# 4. 配置.env文件（仅需LLM API密钥）
