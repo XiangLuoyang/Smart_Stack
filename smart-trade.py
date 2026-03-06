@@ -44,7 +44,84 @@ st.set_page_config(
 )
 
 def update_top_stocks():
-    """更新Top10股票推荐列表"""
+    """更新Top10股票推荐列表 - 优化版"""
+    tickers = data_loader.get_sz100_tickers()
+    if not tickers:
+        return
+        
+    # 创建进度条
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # 获取优化策略
+    strategy = st.session_state.get("calculation_strategy", "two_stage")
+    
+    try:
+        # 导入优化预测器
+        from src.models.optimized_predictor import OptimizedReturnPredictor, CacheConfig
+        
+        # 配置缓存
+        cache_config = CacheConfig(
+            strategy="memory",  # memory/disk/redis
+            ttl_seconds=3600,   # 1小时缓存
+            max_size=1000
+        )
+        
+        optimized_predictor = OptimizedReturnPredictor(cache_config)
+        
+        # 根据策略选择计算方法
+        start_date = datetime(2020, 1, 1)
+        
+        if strategy == "parallel":
+            status_text.text("使用并行计算策略...")
+            recommendations = optimized_predictor.get_stock_recommendations_optimized(
+                tickers, start_date, 30, 0.95, max_workers=5
+            )
+            
+        elif strategy == "two_stage":
+            status_text.text("使用两阶段筛选策略...")
+            recommendations = optimized_predictor.get_stock_recommendations_two_stage(
+                tickers, start_date, 30, 0.95,
+                quick_filter_threshold=0.005, max_candidates=30
+            )
+            
+        else:  # precomputed
+            status_text.text("使用预计算结果...")
+            recommendations = optimized_predictor.get_recommendations_with_precomputation(tickers)
+        
+        # 更新session state
+        st.session_state.top_stocks = {
+            'buy': [code for code, _ in recommendations['buy']],
+            'sell': [code for code, _ in recommendations['sell']]
+        }
+        
+        # 设置标志
+        st.session_state.sz100_calculated = True
+        st.session_state.last_calculation_strategy = strategy
+        st.session_state.last_calculation_time = datetime.now()
+        
+        progress_bar.progress(1.0)
+        status_text.text(f"✅ 沪深100股票分析完成! (策略: {strategy})")
+        
+        # 显示统计信息
+        buy_count = len(recommendations['buy'])
+        sell_count = len(recommendations['sell'])
+        st.info(f"推荐结果: {buy_count}只买入, {sell_count}只卖出")
+        
+    except Exception as e:
+        st.error(f"优化计算失败: {str(e)}")
+        # 回退到原始方法
+        status_text.text("优化方法失败，使用原始方法...")
+        update_top_stocks_original()
+    
+    finally:
+        # 清理进度条
+        time.sleep(0.5)  # 让用户看到完成状态
+        progress_bar.empty()
+        status_text.empty()
+
+def update_top_stocks_original():
+    """原始版本的update_top_stocks函数"""
     tickers = data_loader.get_sz100_tickers()
     if not tickers:
         return
@@ -74,7 +151,6 @@ def update_top_stocks():
     # 设置标志，表示已完成计算
     st.session_state.sz100_calculated = True
     st.success("沪深100股票分析完成！")
-
 # Helper function for cache cleanup
 def cleanup_cache_by_mtime(cache_dir_path: str, days_to_keep: int):
     if not os.path.isdir(cache_dir_path):
@@ -404,3 +480,73 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # 性能优化配置
+    with st.sidebar.expander("⚡ 性能配置", expanded=False):
+        calculation_strategy = st.radio(
+            "计算策略:",
+            ["two_stage", "parallel", "precomputed"],
+            index=0,
+            help="选择计算策略: 两阶段筛选(推荐)/并行计算/预计算"
+        )
+        st.session_state.calculation_strategy = calculation_strategy
+        
+        cache_enabled = st.checkbox("启用缓存", value=True, 
+                                   help="启用缓存可以大幅提升后续计算速度")
+        st.session_state.cache_enabled = cache_enabled
+        
+        if cache_enabled:
+            max_workers = st.slider("并行数量", 1, 10, 5,
+                                   help="同时处理的股票数量")
+            st.session_state.max_workers = max_workers
+            
+            cache_ttl = st.slider("缓存有效期(小时)", 1, 24, 1,
+                                 help="缓存数据的有效期")
+            st.session_state.cache_ttl = cache_ttl * 3600
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 清除缓存", help="清除所有缓存数据"):
+                try:
+                    import shutil
+                    if os.path.exists(".cache"):
+                        shutil.rmtree(".cache")
+                        os.makedirs(".cache", exist_ok=True)
+                    st.success("缓存已清除")
+                except Exception as e:
+                    st.error(f"清除缓存失败: {e}")
+        
+        with col2:
+            if st.button("📊 性能统计", help="查看性能统计信息"):
+                show_performance_stats()
+    
+    # 性能统计函数
+    def show_performance_stats():
+        """显示性能统计信息"""
+        if "performance_stats" not in st.session_state:
+            st.session_state.performance_stats = {
+                "total_calculations": 0,
+                "total_time": 0,
+                "avg_time": 0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+                "last_calculation": None
+            }
+        
+        stats = st.session_state.performance_stats
+        
+        with st.expander("📊 详细性能统计", expanded=True):
+            st.metric("总计算次数", stats["total_calculations"])
+            st.metric("总计算时间", f"{stats['total_time']:.1f}秒")
+            st.metric("平均耗时", f"{stats['avg_time']:.1f}秒")
+            
+            total_requests = stats["cache_hits"] + stats["cache_misses"]
+            if total_requests > 0:
+                hit_rate = stats["cache_hits"] / total_requests * 100
+                st.metric("缓存命中率", f"{hit_rate:.1f}%")
+            else:
+                st.metric("缓存命中率", "N/A")
+            
+            if stats["last_calculation"]:
+                st.metric("上次计算时间", stats["last_calculation"].strftime("%Y-%m-%d %H:%M:%S"))
+    
