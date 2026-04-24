@@ -281,7 +281,7 @@ class ReturnPredictor:
     def predict_future_prices(
         self, data: pd.DataFrame, days: int = 5
     ) -> Dict[str, Any]:
-        """预测未来价格（递归多步，注意累积误差）"""
+        """预测未来价格"""
         try:
             if data.empty or len(data) < 60:
                 return {
@@ -289,53 +289,71 @@ class ReturnPredictor:
                     "success": False
                 }
 
-            last_60_days = data['Close'].values[-60:].reshape(-1, 1)
-            scaled_last_60_days = self.scaler.transform(last_60_days)
-
-            X_test = np.array([scaled_last_60_days[:, 0]])
-            X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
-
-            predictions = []
-            current_batch = X_test
-
-            for _ in range(days):
-                current_pred = self.model.predict(current_batch, verbose=0)
-                predictions.append(current_pred[0, 0])
-
-                current_batch = np.append(
-                    current_batch[:, 1:, :],
-                    current_pred.reshape(1, 1, 1),
-                    axis=1
-                )
-
-            predictions = np.array(predictions).reshape(-1, 1)
-            predictions = self.scaler.inverse_transform(predictions)
-
             last_date = data['Date'].max()
+            last_price = float(data['Close'].iloc[-1])
+            returns_series = data['Close'].pct_change().dropna()
+
+            # 计算收益率统计量
+            mean_daily_return = returns_series.mean()
+            std_daily_return = returns_series.std()
+
+            if LSTM_AVAILABLE and self.model is not None:
+                # LSTM 路径：先 fit scaler 再用模型预测
+                close_prices = data['Close'].values.reshape(-1, 1)
+                self.scaler.fit(close_prices)
+
+                last_60_days = data['Close'].values[-60:].reshape(-1, 1)
+                scaled_last_60_days = self.scaler.transform(last_60_days)
+
+                X_test = np.array([scaled_last_60_days[:, 0]])
+                X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+                predictions_scaled = []
+                current_batch = X_test
+
+                for _ in range(days):
+                    current_pred = self.model.predict(current_batch, verbose=0)
+                    predictions_scaled.append(current_pred[0, 0])
+                    current_batch = np.append(
+                        current_batch[:, 1:, :],
+                        current_pred.reshape(1, 1, 1),
+                        axis=1
+                    )
+
+                predictions_scaled = np.array(predictions_scaled).reshape(-1, 1)
+                predictions = self.scaler.inverse_transform(predictions_scaled)
+                method = "lstm_recursive"
+                logger.warning(
+                    f"predict_future_prices 使用递归多步预测，{days}天预测存在累积误差，"
+                    "建议仅用于短期（≤5天）参考"
+                )
+            else:
+                # 统计方法：用均值和标准差模拟随机游走
+                predictions = []
+                current_price = last_price
+                for _ in range(days):
+                    random_return = np.random.normal(mean_daily_return, std_daily_return)
+                    current_price = current_price * (1 + random_return)
+                    predictions.append(current_price)
+                predictions = np.array(predictions).reshape(-1, 1)
+                method = "statistical_monte_carlo"
+
             prediction_dates = [
                 last_date + pd.Timedelta(days=i+1)
                 for i in range(days)
             ]
 
-            # 注意：多步递归预测存在累积误差，天数越多越不可靠
-            logger.warning(
-                f"predict_future_prices 使用递归多步预测，{days}天预测存在累积误差，"
-                "建议仅用于短期（≤5天）参考"
-            )
+            predicted_prices = [float(price[0]) for price in predictions]
 
             return {
                 "success": True,
-                "predictions": [
-                    {
-                        "date": date.strftime('%Y-%m-%d'),
-                        "predicted_price": float(price[0])
-                    }
-                    for date, price in zip(prediction_dates, predictions)
-                ],
-                "last_actual_price": float(data['Close'].iloc[-1]),
+                "predicted_prices": predicted_prices,
+                "last_actual_price": last_price,
                 "last_actual_date": last_date.strftime('%Y-%m-%d'),
                 "prediction_days": days,
-                "warning": "递归多步预测存在累积误差，仅供短期参考"
+                "method": method,
+                "mean_daily_return": float(mean_daily_return),
+                "std_daily_return": float(std_daily_return),
             }
 
         except Exception as e:
