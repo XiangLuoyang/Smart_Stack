@@ -86,17 +86,17 @@ cp envconf .env
 
 # 编辑.env文件，填入您的API密钥
 # 必需配置：
-# - TUSHARE_TOKEN：Tushare Pro API Token
-# - LLM_API_KEY：LLM服务API密钥
+# - LLM_API_KEY：LLM服务API密钥（如 DeepSeek）
 ```
 
 **配置示例（DeepSeek）：**
 ```env
 LLM_MODEL_NAME="deepseek/deepseek-chat"
 LLM_API_BASE_URL="https://api.deepseek.com/v1"
-LLM_API_KEY="sk-your-deepseek-api-key"
-TUSHARE_TOKEN="your-tushare-token"
+LLM_API_KEY="your-deepseek-api-key"
 ```
+
+> **注意**：数据源已从 Tushare 切换至 YFinance，无需 TUSHARE_TOKEN。
 
 ### 4. 启动应用
 ```bash
