@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Cache directories
+.cache/
+
+# ML prediction cache
+*.json
+!requirements.txt
+!*.json.in
+
+# Keep data directory structure but ignore large cache files
+data/*.csv
+!data/sz100_stocks.csv
