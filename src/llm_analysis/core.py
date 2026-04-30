@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from crewai import Agent, Crew, Process, Task
 from crewai.llm import LLM  # Corrected import for LLM
 from pydantic import BaseModel
-from src.tools.financial_tools import YFinanceStockTool
+from src.tools.akshare_tools import AKShareStockTool
 
 # Load environment variables from .env file
 load_dotenv()
@@ -56,9 +56,9 @@ def create_financial_analysis_crew(symbol: str):
     Returns the Crew object.
     """
     llm = get_llm()
-    
-    # Initialize the custom stock tool
-    stock_tool = YFinanceStockTool()
+
+    # Initialize the custom stock tool (使用AKShare获取A股数据)
+    stock_tool = AKShareStockTool()
     
     # Define Stock Analysis Agent
     stock_analysis_agent = Agent(
