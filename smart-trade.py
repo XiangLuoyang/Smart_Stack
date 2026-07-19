@@ -1,4 +1,18 @@
 import streamlit as st
+
+# ============================================================================
+# LEGACY: Streamlit 单页分析应用
+# ----------------------------------------------------------------------------
+# 本文件是 Smart Stack 的历史 Streamlit 前端,仅保留用于过渡期参考。
+# 新的「操盘工作台」基于 FastAPI + React 实现,代码位于:
+#   - backend/   FastAPI 服务(账户/订单/撮合/风控/回测/行情调度)
+#   - frontend/  React + AntD + TradingView 工作台前端
+# 启动新工作台:
+#   cd backend && uvicorn app.main:app --reload
+#   cd frontend && npm run dev
+# 新代码请勿在本文件中扩展;如需修改分析逻辑,请迁移到 backend/app/engine/。
+# ============================================================================
+
 import logging
 import sys
 from datetime import datetime, date

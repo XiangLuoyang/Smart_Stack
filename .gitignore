@@ -11,6 +11,7 @@ build/
 # Virtual Environment
 venv/
 env/
+.venv/
 .env/
 
 # IDE
@@ -22,6 +23,9 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Editor / agent
+.claude/
+
 # Local development settings
 .env
 .env.local
@@ -32,3 +36,40 @@ Thumbs.db
 
 # Cache directories
 .cache/
+
+# Runtime artifacts
+data/watchlist.json
+data/smartstack.db
+
+# Backend (FastAPI + SQLite)
+backend/.venv/
+backend/venv/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/*.db
+backend/**/*.db
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+backend/.env
+backend/logs/
+backend/*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend (React + Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+frontend/.vite/
+frontend/npm-debug.log*
+frontend/yarn-error.log*
+frontend/coverage/
+
+# Build artifacts
+*.tsbuildinfo
+.eslintcache

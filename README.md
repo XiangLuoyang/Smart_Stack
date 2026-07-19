@@ -1,223 +1,169 @@
-# Smart Stack - 智能股票分析与决策辅助系统
+# Smart Stack 操盘工作台
 
-## 🚀 项目简介
-Smart Stack 是一款融合传统机器学习量化分析与前沿大语言模型（LLM）深度解读的智能股票分析系统。通过双引擎并行分析，为投资者提供多维度的市场洞察与决策支持。
+A 股纸面操盘工作台:账户 / 持仓 / 订单 / 撮合 / 风控 / 回测 / 信号源一体化。前端 React + AntD + TradingView Lightweight Charts,后端 FastAPI + SQLAlchemy + SQLite + APScheduler。
 
-## ✨ 核心特性
+> 本工作台是**纸面交易(paper trading)**:不接真实券商,资金风险为零,用于策略验证、决策演练、回测复盘。
 
-### 🤖 双引擎智能分析
-- **机器学习量化引擎**：基于LSTM的短期趋势预测 + TA-Lib技术指标分析
-- **LLM深度解读引擎**：大语言模型对市场数据的深度分析与报告生成
-- **并行展示**：两种分析视角同步呈现，交叉验证投资信号
+## 功能
 
-### 📊 机器学习模块
-- **趋势预测**：LSTM深度学习模型进行短期股价趋势学习
-- **技术分析**：集成TA-Lib，支持MA、RSI、MACD、布林带等20+技术指标
-- **K线形态识别**：自动识别十字星、锤头线、吞没形态等常见形态
-- **量化报告**：结构化输出包含预测指标、风险评估、投资建议
+- **账户管理**:多虚拟账户,初始资金自定义,实时浮动盈亏
+- **下单**:市价 / 限价,买卖双向,键盘快捷键(F1 买 / F2 卖 / Enter 提交)
+- **撮合**:市价即时成交,限价单挂单等待价格触及;A 股真实成本(佣金万 2.5 / 印花税千 1 / 过户费)
+- **风控**:单票仓位上限 / 总仓位上限 / 日内交易次数 / 持仓不足保护,下单前拦截
+- **行情**:后端 APScheduler 定时拉取(交易时段内),SSE 推送 + 前端轮询双通道
+- **K 线**:TradingView Lightweight Charts,MA5/MA20 叠加,成交量副图
+- **信号源**:LSTM 预期收益 + LLM 报告作为决策参考(只读,不自动下单)
+- **回测**:双均线策略,逐 bar 回放,输出净值曲线 / 夏普 / 最大回撤 / 胜率
 
-### 🧠 LLM深度分析模块
-- **灵活配置**：支持OpenAI兼容的各类LLM模型（DeepSeek、通义千问等）
-- **全面分析**：覆盖实时数据、财务指标、技术面、市场背景、风险评估
-- **专业报告**：生成Markdown格式的深度分析报告
+## 架构
 
-### ⚡ 高效缓存机制
-- **本地文件缓存**：机器学习预测值和LLM报告按日期缓存
-- **智能去重**：同一股票当日重复分析直接从缓存加载
-- **自动清理**：默认保留最近7天缓存，平衡存储与性能
-
-### 🎨 用户友好界面
-- **Streamlit构建**：交互式Web应用，零配置启动
-- **直观操作**：股票选择、参数调整、结果查看一站式完成
-- **响应式设计**：适配桌面和移动端浏览
-
-## 🔄 重要更新（2026-03-06）
-
-### 数据源优化
-- **已切换至YFinance**：移除Tushare依赖，无需API Token
-- **多市场支持**：A股、美股、港股统一数据接口
-- **安装简化**：无需系统级TA-Lib库安装
-- **开箱即用**：配置更简单，启动更快
-
-### 兼容性说明
-- ✅ 原有功能完全保留
-- ✅ 数据格式向后兼容
-- ✅ 缓存机制继续有效
-- ✅ 所有分析模块正常运作
-
-## 🛠️ 快速开始
-
-### 1. 环境准备
-```bash
-# 克隆项目
-git clone git@github.com:XiangLuoyang/Smart_Stack.git
-cd Smart_Stack
-
-# 创建虚拟环境（推荐）
-python3 -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
+```
+┌─────────────────────────────────────────────┐
+│  前端工作台 (React + AntD + TradingView)     │ :5173
+│  三栏布局:自选 | K线+下单 | 信号+持仓       │
+└────────────────┬────────────────────────────┘
+                 │ HTTP + SSE
+┌────────────────▼────────────────────────────┐
+│  后端 API (FastAPI + Pydantic)               │ :8000
+│  accounts / orders / market / signals / ...  │
+├─────────────────────────────────────────────┤
+│  服务层                                      │
+│  AccountService / OrderService               │
+│  MatchingEngine / RiskEngine / FeesCalc      │
+├─────────────────────────────────────────────┤
+│  数据层                                      │
+│  SQLite + SQLAlchemy ORM                     │
+│  APScheduler 行情调度                        │
+│  旧 src/ 计算模块(technical/risk/predict)   │
+└─────────────────────────────────────────────┘
 ```
 
-### 2. 安装依赖（已简化）
-```bash
-# 安装Python依赖（已简化，无需系统级TA-Lib）
-pip install -r requirements.txt
-```
-```bash
-# 安装TA-Lib系统依赖
-# macOS
-brew install ta-lib
+## 快速开始
 
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install -y libta-lib-dev
+### 1. 安装依赖
 
-# Windows：从 https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib 下载对应whl文件
-
-# 安装Python依赖
-pip install -r requirements.txt
-```
-
-### 3. 配置环境变量
-```bash
-# 复制配置模板
-cp envconf .env
-
-# 编辑.env文件，填入您的API密钥
-# 必需配置：
-# - LLM_API_KEY：LLM服务API密钥（如 DeepSeek）
-```
-
-**配置示例（DeepSeek）：**
-```env
-LLM_MODEL_NAME="deepseek/deepseek-chat"
-LLM_API_BASE_URL="https://api.deepseek.com/v1"
-LLM_API_KEY="your-deepseek-api-key"
-```
-
-> **注意**：数据源已从 Tushare 切换至 YFinance，无需 TUSHARE_TOKEN。
-
-### 4. 启动应用
-```bash
-streamlit run smart-trade.py
-```
-访问 http://localhost:8501 开始使用
-
-## 🐳 Docker部署（可选）
-```bash
-# 一键部署
-docker-compose up -d --build
-
-# 访问服务
-# 浏览器打开 http://localhost:8501
-
-# 停止服务
-docker-compose down
-
-# 更新代码后重新部署
-docker-compose up -d --build
-```
-
-## 📖 使用指南
-
-### 单只股票分析
-1. 在侧边栏选择"单只股票分析"模式
-2. 输入或选择股票代码（如：000001.SZ）
-3. 调整预测参数（可选）
-4. 查看分析结果：
-   - 实时股价数据
-   - 技术指标图表
-   - LSTM趋势预测
-   - LLM深度分析报告
-
-### 沪深100分析
-1. 选择"沪深100股票分析"模式
-2. 系统自动分析沪深100成分股
-3. 查看Top10推荐列表
-4. 点击任意股票查看详细分析
-
-### 缓存机制说明
-- 首次分析会调用API进行计算
-- 同一天内重复分析同一股票直接从缓存读取
-- 缓存文件存储在 `.cache/` 目录
-- 自动清理7天前的缓存
-
-## 🏗️ 项目架构
-```
-Smart_Stack/
-├── src/                    # 源代码
-│   ├── config/            # 应用配置
-│   ├── data/              # 数据加载与处理
-│   ├── llm_analysis/      # LLM分析核心
-│   ├── models/            # 机器学习模型
-│   ├── tools/             # 外部工具接口
-│   └── visualization/     # 可视化与报告
-├── .cache/                # 缓存目录（自动生成）
-├── data/                  # 静态数据文件
-├── smart-trade.py         # 主程序入口
-├── requirements.txt       # Python依赖
-├── Dockerfile             # Docker配置
-├── docker-compose.yml     # Docker Compose配置
-├── .env                   # 环境配置（用户创建）
-└── envconf                # 环境配置模板
-```
-
-## ⚠️ 重要说明
-
-### 技术依赖
-- **TA-Lib C库**：必须正确安装系统级TA-Lib库
-- **Python 3.11+**：推荐使用Python 3.11或更高版本
-- **API密钥**：需要Tushare Pro和LLM服务的有效API密钥
-
-### 模型效果
-- **LSTM预测**：当前为即时训练模型，预测结果仅供参考
-- **LLM分析**：分析质量取决于所选模型和服务商
-- **风险提示**：所有分析结果仅供参考，不构成投资建议
-
-### 性能优化
-- 缓存机制显著减少API调用和计算时间
-- 支持Docker部署，环境隔离更稳定
-- 代码模块化设计，便于扩展和维护
-
-## 🔄 更新与维护
-
-### 代码更新
-```bash
-# 拉取最新代码
-git pull origin main
-
-# 重新安装依赖（如有变更）
+```powershell
+# 后端(Python 3.12+)
+cd backend
 pip install -r requirements.txt
 
-# Docker用户重新构建
-docker-compose up -d --build
+# 前端(Node 18+)
+cd ..\frontend
+npm install
 ```
 
-### 缓存管理
-- 缓存自动清理：保留最近7天数据
-- 手动清理：删除 `.cache/` 目录
-- 缓存验证：系统会自动检测数据有效性
+国内网络建议加镜像:
+- pip: `-i https://pypi.tuna.tsinghua.edu.cn/simple`
+- npm: `npm config set registry https://registry.npmmirror.com`
 
-## 📄 许可证
-本项目采用 MIT 许可证 - 详见 LICENSE 文件
+### 2. 配置
 
-## 🤝 贡献指南
-欢迎贡献代码、报告问题或提出建议：
+```powershell
+cd backend
+copy .env.example .env
+# 按需编辑 .env:LLM_API_KEY(可选,信号源用)、DEBUG、费率等
+```
 
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+### 3. 一键启动
 
-## 📞 支持与反馈
-- **问题报告**：[GitHub Issues](https://github.com/XiangLuoyang/Smart_Stack/issues)
-- **功能建议**：通过Issues提交
-- **技术讨论**：欢迎提交Pull Request
+Windows:
+```powershell
+.\start_workbench.bat
+```
 
-## 🎯 项目愿景
-Smart Stack 致力于成为个人投资者最实用的智能分析工具，通过技术创新降低投资分析门槛，让数据驱动的投资决策更加简单、可靠。
+macOS / Linux:
+```bash
+./start_workbench.sh
+```
 
----
-**开始使用 Smart Stack，让智能分析为您的投资决策赋能！** 🚀
+或分两个终端手动启动:
+```powershell
+# 终端 1:后端
+cd backend; .\run.bat          # 或 bash run.sh
+
+# 终端 2:前端
+cd frontend; .\dev.bat
+```
+
+### 4. 访问
+
+- **工作台**:http://localhost:5173
+- **API 文档(Swagger)**:http://localhost:8000/docs
+
+## 使用流程
+
+1. 顶栏「新建」创建纸面账户(默认 100 万)
+2. 左栏输入代码加自选(如 `000001`),点击选中
+3. 中栏看 K 线,下方订单面板下单(限价 / 市价,买 / 卖)
+4. 右栏查看 LSTM 信号、LLM 报告、当前持仓
+5. 底部 Tab:委托中 / 成交记录 / 风控规则 / 回测
+
+## 键盘快捷键
+
+| 键 | 功能 |
+|----|------|
+| F1 | 切到买入 |
+| F2 | 切到卖出 |
+| Enter | 提交订单 |
+| Esc | (组件内)取消 |
+
+## 测试
+
+```powershell
+cd backend
+$env:PYTHONPATH = "."
+python -m pytest tests/ -v
+```
+
+覆盖:费用计算、撮合规则、风控拦截、持仓加权成本、订单全链路、回测引擎。
+
+## 目录结构
+
+```
+├─ backend/                 # FastAPI 后端
+│  ├─ app/
+│  │  ├─ api/               # 路由(accounts/orders/market/signals/...)
+│  │  ├─ services/          # 业务编排(account/order/market/...)
+│  │  ├─ engine/            # 纯计算(fees/matching/risk/technical)
+│  │  ├─ models/            # SQLAlchemy ORM
+│  │  ├─ schemas/           # Pydantic I/O
+│  │  ├─ jobs/              # APScheduler 定时任务
+│  │  └─ main.py            # FastAPI 入口
+│  ├─ tests/                # pytest
+│  └─ requirements.txt
+├─ frontend/                # React 工作台
+│  ├─ src/
+│  │  ├─ components/        # 顶栏/自选/K线/订单/持仓/底部Tab
+│  │  ├─ stores/            # Zustand 状态
+│  │  ├─ api/               # axios 客户端
+│  │  └─ types/             # TypeScript 类型
+│  └─ package.json
+├─ src/                     # 旧 Streamlit 分析模块(保留,作为 engine 源)
+├─ smart-trade.py           # 旧 Streamlit 入口(legacy,见 README_legacy.md)
+├─ data/                    # SQLite + 自选列表
+└─ start_workbench.bat/.sh  # 一键启动
+```
+
+## 关键设计
+
+- **服务端拉取行情**,而非前端轮询;交易时段判断按上交所日历(节假日表硬编码当年)
+- **撮合引擎纯函数式**,输入(订单+行情)输出(成交),易测试
+- **费用模型可配置**(`.env` 的 `FEES_*` 变量覆盖默认值)
+- **风控下单前拦截**,任一规则不通过即 REJECTED + 原因码
+- **信号源是只读旁路**,不自动触发下单,决策完全由人
+- **旧分析模块复用**,`src/data` / `src/models` 的纯计算迁移到 `backend/app/engine/`
+
+## 不在本期范围
+
+- 真实券商对接(架构预留,不实现)
+- 期权 / 期货 / 融资融券(只做现货多头)
+- 移动端适配(桌面优先)
+- tick 级实时推送(60 秒轮询足够纸面操盘)
+
+## 历史
+
+旧版 Streamlit 单页分析应用见 [README_legacy.md](README_legacy.md),入口 `smart-trade.py` 仍可运行(`streamlit run smart-trade.py`)。
+
+## License
+
+MIT
