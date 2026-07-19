@@ -1,7 +1,12 @@
 import pandas as pd
 from typing import Dict, Any 
 import streamlit as st
-import talib # Import TA-Lib for candlestick patterns
+try:
+    import talib  # Import TA-Lib for candlestick patterns
+    TALIB_AVAILABLE = True
+except ImportError:
+    talib = None
+    TALIB_AVAILABLE = False
 import traceback # Import traceback for detailed error logging
 
 class ReportGenerator:
@@ -22,6 +27,28 @@ class ReportGenerator:
                 # For now, this function will proceed, and .get(key, 'N/A') will handle missing data.
                 pass # Or st.error(f"无法生成报告: {prediction_results['error']}") and return
 
+            # Normalize prediction results keys.
+            # prediction.py returns raw decimals (e.g., 0.001); reports need percentages.
+            # 对齐 calculate_expected_return() 返回的字段名，避免 _pct 后缀导致的 N/A。
+            expected_ret_raw = prediction_results.get('expected_daily_return', None)
+            daily_std_raw = prediction_results.get('daily_std', None)
+            ci = prediction_results.get('confidence_interval', {}) or {}
+
+            expected_daily_return_pct = (
+                round(expected_ret_raw * 100, 4) if isinstance(expected_ret_raw, (int, float))
+                else None
+            )
+            daily_volatility_pct = (
+                round(daily_std_raw * 100, 4) if isinstance(daily_std_raw, (int, float))
+                else None
+            )
+            daily_lower_bound_pct = (
+                round(ci.get('lower', 0) * 100, 4) if ci else None
+            )
+            daily_upper_bound_pct = (
+                round(ci.get('upper', 0) * 100, 4) if ci else None
+            )
+
             # Section for Core Metrics
             st.markdown("### 📈 核心指标")
             core_metrics_data = {
@@ -31,12 +58,12 @@ class ReportGenerator:
                     '最大回撤', '夏普比率'
                 ],
                 '数值': [
-                    prediction_results.get('expected_daily_return_pct', 'N/A'),
-                    prediction_results.get('daily_lower_bound_pct', 'N/A'),
-                    prediction_results.get('daily_upper_bound_pct', 'N/A'),
-                    prediction_results.get('daily_volatility_pct', 'N/A'),
-                    risk_metrics.get('最大回撤', 'N/A'),
-                    risk_metrics.get('夏普比率', 'N/A'),
+                    expected_daily_return_pct,
+                    daily_lower_bound_pct,
+                    daily_upper_bound_pct,
+                    daily_volatility_pct,
+                    risk_metrics.get('最大回撤', None),
+                    risk_metrics.get('夏普比率', None),
                 ]
             }
 
@@ -45,14 +72,17 @@ class ReportGenerator:
                 if isinstance(val, (int, float)):
                     formatted_metric_values.append(f"{val:.2f}%")
                 else:
-                    formatted_metric_values.append(str(val))
+                    formatted_metric_values.append(str(val) if val is not None else 'N/A')
             core_metrics_data['数值'] = formatted_metric_values
             
             df_core_metrics = pd.DataFrame(core_metrics_data)
 
             # Check if there's any meaningful data to display in the table
-            has_predictive_data = prediction_results.get('expected_daily_return_pct', 'N/A') != 'N/A'
-            has_risk_data = risk_metrics.get('最大回撤', 'N/A') != 'N/A' or risk_metrics.get('夏普比率', 'N/A') != 'N/A'
+            has_predictive_data = expected_daily_return_pct is not None
+            has_risk_data = (
+                risk_metrics.get('最大回撤') is not None
+                or risk_metrics.get('夏普比率') is not None
+            )
 
             if has_predictive_data or has_risk_data:
                 st.dataframe(
@@ -69,7 +99,7 @@ class ReportGenerator:
 
             # Section for Investment Advice
             st.markdown("### 💡 投资建议 (基于模型与技术信号)")
-            expected_daily_return = prediction_results.get('expected_daily_return_pct', 'N/A')
+            expected_daily_return = expected_daily_return_pct
             
             signals = []
             if not stock_data.empty and len(stock_data) >= 20: # Min length for some TAs
@@ -107,7 +137,7 @@ class ReportGenerator:
 
                 # Candlestick Patterns
                 ohlc_cols = ['Open', 'High', 'Low', 'Close']
-                if all(col in stock_data.columns for col in ohlc_cols) and stock_data[ohlc_cols].iloc[-len(stock_data):].notna().all().all(): # Check all needed rows for talib
+                if TALIB_AVAILABLE and all(col in stock_data.columns for col in ohlc_cols) and stock_data[ohlc_cols].iloc[-len(stock_data):].notna().all().all():
                     op, hi, lo, cl = stock_data['Open'], stock_data['High'], stock_data['Low'], stock_data['Close']
                     if len(op) > 0: # Ensure there is data for TA-Lib functions
                         # Consistently use .values[-1] for TA-Lib pattern results

@@ -339,9 +339,13 @@ def main():
                 with col1:
                     st.markdown("### 🚀 强烈推荐买入")
                     if st.session_state.top_stocks['buy']:
+                        # top_stocks['buy'] 存的是 (code, expected_return) 元组，
+                        # 这里把收益率格式化为百分比展示（原实现写死 "--"）
+                        buy_codes = [code for code, _ in st.session_state.top_stocks['buy'][:10]]
+                        buy_returns = [f"{ret * 100:.2f}%" for _, ret in st.session_state.top_stocks['buy'][:10]]
                         buy_data = {
-                            '股票代码': st.session_state.top_stocks['buy'][:10],
-                            '预期涨幅': ["--"] * len(st.session_state.top_stocks['buy'][:10])
+                            '股票代码': buy_codes,
+                            '预期涨幅': buy_returns
                         }
                         st.dataframe(
                             pd.DataFrame(buy_data),
@@ -357,9 +361,11 @@ def main():
                 with col2:
                     st.markdown("### 🚨 建议谨慎卖出")
                     if st.session_state.top_stocks['sell']:
+                        sell_codes = [code for code, _ in st.session_state.top_stocks['sell'][:10]]
+                        sell_returns = [f"{ret * 100:.2f}%" for _, ret in st.session_state.top_stocks['sell'][:10]]
                         sell_data = {
-                            '股票代码': st.session_state.top_stocks['sell'][:10],
-                            '预期跌幅': ["--"] * len(st.session_state.top_stocks['sell'][:10])
+                            '股票代码': sell_codes,
+                            '预期跌幅': sell_returns
                         }
                         st.dataframe(
                             pd.DataFrame(sell_data),
@@ -377,14 +383,16 @@ def main():
                         fig = go.Figure()
                         if st.session_state.top_stocks['buy']:
                             buy_text = "强烈推荐买入:\n" + "\n".join(
-                                st.session_state.top_stocks['buy'][:10]
+                                f"{code} ({ret*100:.2f}%)"
+                                for code, ret in st.session_state.top_stocks['buy'][:10]
                             )
                             fig.add_annotation(text=buy_text, x=0.25, y=0.5,
                                               showarrow=False, font=dict(size=14))
 
                         if st.session_state.top_stocks['sell']:
                             sell_text = "建议谨慎卖出:\n" + "\n".join(
-                                st.session_state.top_stocks['sell'][:10]
+                                f"{code} ({ret*100:.2f}%)"
+                                for code, ret in st.session_state.top_stocks['sell'][:10]
                             )
                             fig.add_annotation(text=sell_text, x=0.75, y=0.5,
                                               showarrow=False, font=dict(size=14))

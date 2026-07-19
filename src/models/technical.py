@@ -1,8 +1,15 @@
 import pandas as pd
 import logging
-import talib  # Import TA-Lib
 
 logger = logging.getLogger(__name__)
+
+# TA-Lib 为可选依赖：未安装时回退到纯 pandas 实现，保证 README 所称"无需系统级 TA-Lib"成立。
+try:
+    import talib
+    TALIB_AVAILABLE = True
+except ImportError:
+    talib = None
+    TALIB_AVAILABLE = False
 
 
 class TechnicalIndicatorCalculator:
@@ -14,6 +21,15 @@ class TechnicalIndicatorCalculator:
         """计算RSI (使用 TA-Lib)"""
         if 'Close' not in data.columns or data['Close'].isnull().all():
             return pd.Series(index=data.index, dtype='float64')
+        if not TALIB_AVAILABLE:
+            # Wilder 平滑（ewm alpha=1/period），与 talib 默认口径一致
+            delta = data['Close'].diff()
+            gain = delta.where(delta > 0, 0.0)
+            loss = -delta.where(delta < 0, 0.0)
+            avg_gain = gain.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+            avg_loss = loss.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+            rs = avg_gain / avg_loss.replace(0, pd.NA)
+            return (100.0 - (100.0 / (1.0 + rs))).fillna(100.0)
         return talib.RSI(data['Close'], timeperiod=period)
 
     def calculate_macd(
@@ -24,6 +40,12 @@ class TechnicalIndicatorCalculator:
         if 'Close' not in data.columns or data['Close'].isnull().all():
             empty_series = pd.Series(index=data.index, dtype='float64')
             return empty_series, empty_series, empty_series
+        if not TALIB_AVAILABLE:
+            fast = data['Close'].ewm(span=fastperiod, adjust=False).mean()
+            slow = data['Close'].ewm(span=slowperiod, adjust=False).mean()
+            macd = fast - slow
+            signal = macd.ewm(span=signalperiod, adjust=False).mean()
+            return macd, signal, macd - signal
 
         macd, macdsignal, macdhist = talib.MACD(
             data['Close'],
@@ -41,6 +63,10 @@ class TechnicalIndicatorCalculator:
         if 'Close' not in data.columns or data['Close'].isnull().all():
             empty_series = pd.Series(index=data.index, dtype='float64')
             return empty_series, empty_series, empty_series
+        if not TALIB_AVAILABLE:
+            middle = data['Close'].rolling(window=period).mean()
+            std = data['Close'].rolling(window=period).std(ddof=0)  # talib 用总体标准差
+            return middle + nbdevup * std, middle, middle - nbdevdn * std
 
         upperband, middleband, lowerband = talib.BBANDS(
             data['Close'],

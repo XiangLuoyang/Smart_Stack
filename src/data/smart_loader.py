@@ -11,6 +11,72 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+class _YFinanceAdapter:
+    """直接封装 yfinance 库，避免通过 StockDataLoader 造成循环调用。
+
+    背景：原实现把 StockDataLoader 注册为 yfinance 数据源，而 StockDataLoader
+    内部又委托回 SmartDataSource，导致非 A 股路径无限递归（RecursionError）。
+    此适配器直接调用 yfinance，切断环。
+    """
+
+    def __init__(self, config=None):
+        import yfinance as yf
+        self.yf = yf
+        self.config = config or {}
+        self.cache: dict = {}
+        self.cache_timeout = 300
+
+    def load_stock_data(self, stock_code: str, period: str = "daily",
+                        start_date: Optional[str] = None,
+                        end_date: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
+        """直接使用 yfinance 下载数据并转换为统一格式"""
+        try:
+            # yfinance 接受 YYYY-MM-DD；兼容传入的 YYYYMMDD
+            if start_date and len(start_date) == 8:
+                start_date_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}"
+            else:
+                start_date_fmt = start_date or "2020-01-01"
+
+            if end_date and len(end_date) == 8:
+                end_date_fmt = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}"
+            else:
+                end_date_fmt = end_date or datetime.now().strftime('%Y-%m-%d')
+
+            cache_key = (stock_code, period, start_date_fmt, end_date_fmt)
+            if cache_key in self.cache:
+                df_cached, ts = self.cache[cache_key]
+                if (datetime.now() - ts).total_seconds() < self.cache_timeout:
+                    return df_cached.copy(), stock_code
+
+            clean = str(stock_code).strip().upper()
+            ticker = self.yf.Ticker(clean)
+            df = ticker.history(start=start_date_fmt, end=end_date_fmt)
+
+            if df.empty:
+                logger.warning(f"yfinance 返回空数据: {clean}")
+                return pd.DataFrame(), clean
+
+            df.index = pd.to_datetime(df.index)
+            df.index.name = 'Date'
+            df = df.reset_index()
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None)
+
+            self.cache[cache_key] = (df.copy(), datetime.now())
+            logger.info(f"yfinance 成功获取 {clean}: {len(df)} 条记录")
+            return df, clean
+        except Exception as e:
+            logger.warning(f"yfinance 数据获取失败: {e}")
+            return pd.DataFrame(), stock_code
+
+    def get_market_info(self, stock_code: str) -> Dict[str, Any]:
+        try:
+            ticker = self.yf.Ticker(stock_code)
+            return ticker.info if ticker.info else {}
+        except Exception:
+            return {}
+
+
 class SmartDataSource:
     """
     智能数据源选择器
@@ -53,8 +119,9 @@ class SmartDataSource:
 
             # 尝试导入 YFinance 数据源
             try:
-                from .loader import StockDataLoader
-                yfinance_loader = StockDataLoader(self.config)
+                # 直接封装 yfinance 库，避免通过 StockDataLoader 产生循环调用
+                import yfinance as yf
+                yfinance_loader = _YFinanceAdapter(self.config)
                 self.data_sources['yfinance'] = yfinance_loader
                 self.source_priority.append('yfinance')
                 logger.info("YFinance 数据源已加载（全球市场）")

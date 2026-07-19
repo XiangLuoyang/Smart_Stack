@@ -6,7 +6,6 @@ import akshare as ak
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import streamlit as st
 import time
 from typing import Tuple, Dict, Any, Optional
 import logging
@@ -21,7 +20,7 @@ class AKShareDataLoader:
         self.config = config or {}
         self.cache = {}  # 简单缓存机制
         self.cache_timeout = 300  # 5分钟缓存
-        st.info("📊 使用AKShare数据源 - 专门为A股优化，完全免费")
+        logger.info("AKShare数据源已初始化（A股优化，免费）")
     
     def load_stock_data(self, stock_code: str, period: str = "daily", 
                        start_date: Optional[str] = None, 
@@ -42,15 +41,15 @@ class AKShareDataLoader:
             # 标准化代码
             standardized_code = self._standardize_code(stock_code)
             
-            # 检查缓存
+           # 检查缓存
             cache_key = f"{standardized_code}_{period}_{start_date}_{end_date}"
             if cache_key in self.cache:
                 cached_data, timestamp = self.cache[cache_key]
                 if time.time() - timestamp < self.cache_timeout:
-                    st.info(f"📦 使用缓存数据: {standardized_code}")
+                    logger.debug(f"使用缓存数据: {standardized_code}")
                     return cached_data.copy(), standardized_code
             
-            st.info(f"📡 正在通过AKShare获取 {standardized_code} 数据...")
+            logger.info(f"正在通过AKShare获取 {standardized_code} 数据...")
             
             # 设置默认日期范围
             if not end_date:
@@ -68,7 +67,7 @@ class AKShareDataLoader:
             )
             
             if df.empty:
-                st.warning(f"⚠️  未获取到 {standardized_code} 的历史数据")
+                logger.warning(f"未获取到 {standardized_code} 的历史数据")
                 return pd.DataFrame(), standardized_code
             
             # 标准化数据格式
@@ -77,11 +76,10 @@ class AKShareDataLoader:
             # 缓存数据
             self.cache[cache_key] = (df.copy(), time.time())
             
-            st.success(f"✅ 成功获取 {standardized_code} 数据: {len(df)} 条记录")
+            logger.info(f"成功获取 {standardized_code} 数据: {len(df)} 条记录")
             return df, standardized_code
             
         except Exception as e:
-            st.error(f"❌ AKShare数据获取失败: {e}")
             logger.error(f"AKShare数据获取失败: {e}", exc_info=True)
             return pd.DataFrame(), stock_code
     
@@ -92,44 +90,60 @@ class AKShareDataLoader:
         Args:
             stock_code: 股票代码
             
-        Returns:
-            实时行情字典
-        """
+       Returns:
+           实时行情字典
+       """
         try:
             standardized_code = self._standardize_code(stock_code)
-            
-            # 获取所有A股实时行情
-            spot_df = ak.stock_zh_a_spot()
-            
-            # 查找目标股票
-            stock_data = spot_df[spot_df['代码'] == standardized_code]
-            
-            if not stock_data.empty:
-                stock = stock_data.iloc[0]
-                return {
-                    'symbol': standardized_code,
-                    'name': stock['名称'],
-                    'latest_price': stock['最新价'],
-                    'change_percent': stock['涨跌幅'],
-                    'change_amount': stock['涨跌额'],
-                    'volume': stock['成交量'],
-                    'amount': stock['成交额'],
-                    'open': stock['今开'],
-                    'high': stock['最高'],
-                    'low': stock['最低'],
-                    'pre_close': stock['昨收'],
-                    'amplitude': stock['振幅'],
-                    'turnover_rate': stock['换手率'],
-                    'pe_ratio': stock['市盈率-动态'],
-                    'pb_ratio': stock['市净率'],
-                    'timestamp': datetime.now().isoformat()
-                }
-            else:
-                st.warning(f"⚠️  未找到 {standardized_code} 的实时行情")
+           
+            # 拉取近 10 天历史，取最新一根构造实时行情，避免全市场 stock_zh_a_spot 的开销。
+            # stock_zh_a_hist 单股精确、轻量；市盈率/市净率不在日线数据中，单独从公司信息补全。
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
+            df = ak.stock_zh_a_hist(
+                symbol=standardized_code, period="daily",
+                start_date=start_date, end_date=end_date, adjust=""
+            )
+
+            if df is None or df.empty:
+                logger.warning(f"未找到 {standardized_code} 的实时行情")
                 return {}
-                
+
+            latest = df.iloc[-1]
+            change = float(latest['涨跌额']) if '涨跌额' in df.columns and pd.notna(latest['涨跌额']) else 0.0
+            latest_close = float(latest['收盘'])
+            pre_close = latest_close - change
+
+            # 市盈率/市净率需另行获取，缺失则置 None（不阻塞主流程）
+            pe_ratio = None
+            pb_ratio = None
+            try:
+                info = self.get_company_info(stock_code)
+                pe_ratio = info.get('市盈率(动态)') if info else None
+                pb_ratio = info.get('市净率') if info else None
+            except Exception:
+                pass
+
+            return {
+                'symbol': standardized_code,
+                'latest_price': latest_close,
+                'change_percent': float(latest.get('涨跌幅', 0.0)) if '涨跌幅' in df.columns else 0.0,
+                'change_amount': change,
+                'volume': float(latest.get('成交量', 0.0)) if '成交量' in df.columns else 0.0,
+                'amount': float(latest.get('成交额', 0.0)) if '成交额' in df.columns else 0.0,
+                'open': float(latest.get('开盘', 0.0)) if '开盘' in df.columns else 0.0,
+                'high': float(latest.get('最高', 0.0)) if '最高' in df.columns else 0.0,
+                'low': float(latest.get('最低', 0.0)) if '最低' in df.columns else 0.0,
+                'pre_close': pre_close,
+                'amplitude': float(latest.get('振幅', 0.0)) if '振幅' in df.columns else 0.0,
+                'turnover_rate': float(latest.get('换手率', 0.0)) if '换手率' in df.columns else 0.0,
+                'pe_ratio': pe_ratio,
+                'pb_ratio': pb_ratio,
+                'timestamp': datetime.now().isoformat()
+            }
+
         except Exception as e:
-            st.error(f"❌ 实时行情获取失败: {e}")
+            logger.warning(f"实时行情获取失败: {e}")
             return {}
     
     def get_fund_flow(self, stock_code: str, market: str = "SZ") -> pd.DataFrame:
@@ -140,15 +154,15 @@ class AKShareDataLoader:
             stock_code: 股票代码
             market: 市场 (SZ: 深交所, SH: 上交所)
             
-        Returns:
-            资金流向DataFrame
-        """
+       Returns:
+           资金流向DataFrame
+       """
         try:
             standardized_code = self._standardize_code(stock_code)
             df = ak.stock_individual_fund_flow(stock=standardized_code, market=market)
             return df
         except Exception as e:
-            st.warning(f"资金流向数据获取失败: {e}")
+            logger.warning(f"资金流向数据获取失败: {e}")
             return pd.DataFrame()
     
     def get_minute_data(self, stock_code: str, period: str = "5") -> pd.DataFrame:
@@ -159,15 +173,15 @@ class AKShareDataLoader:
             stock_code: 股票代码
             period: 周期 (1, 5, 15, 30, 60)
             
-        Returns:
-            分时数据DataFrame
-        """
+       Returns:
+           分时数据DataFrame
+       """
         try:
             standardized_code = self._standardize_code(stock_code)
             df = ak.stock_zh_a_hist_min_em(symbol=standardized_code, period=period, adjust="")
             return df
         except Exception as e:
-            st.warning(f"分时数据获取失败: {e}")
+            logger.warning(f"分时数据获取失败: {e}")
             return pd.DataFrame()
     
     def get_company_info(self, stock_code: str) -> Dict[str, Any]:
@@ -191,7 +205,7 @@ class AKShareDataLoader:
                 return info
             return {}
         except Exception as e:
-            st.warning(f"公司信息获取失败: {e}")
+            logger.warning(f"公司信息获取失败: {e}")
             return {}
     
     def get_financial_data(self, stock_code: str) -> pd.DataFrame:
@@ -203,7 +217,7 @@ class AKShareDataLoader:
             
         Returns:
             财务数据DataFrame
-        """
+       """
         try:
             standardized_code = self._standardize_code(stock_code)
             df = ak.stock_financial_report_sina(symbol=f"sz{standardized_code}" 
@@ -211,7 +225,7 @@ class AKShareDataLoader:
                                                else f"sh{standardized_code}")
             return df
         except Exception as e:
-            st.warning(f"财务数据获取失败: {e}")
+            logger.warning(f"财务数据获取失败: {e}")
             return pd.DataFrame()
     
     def get_news(self, stock_code: str) -> pd.DataFrame:
@@ -223,13 +237,13 @@ class AKShareDataLoader:
             
         Returns:
             新闻DataFrame
-        """
+       """
         try:
             standardized_code = self._standardize_code(stock_code)
             df = ak.stock_news_em(symbol=standardized_code)
             return df
         except Exception as e:
-            st.warning(f"新闻数据获取失败: {e}")
+            logger.warning(f"新闻数据获取失败: {e}")
             return pd.DataFrame()
     
     def _standardize_code(self, code: str) -> str:
@@ -365,16 +379,22 @@ class AKShareDataLoader:
             连接是否成功
         """
         try:
-            # 尝试获取一只常见股票数据
-            test_df = ak.stock_zh_a_spot()
-            if not test_df.empty:
-                st.success("✅ AKShare连接测试成功")
+            # 轻量探测：拉取单只常见股票（平安银行 000001）近 3 天日线，
+            # 避免每次 initialize_sources 都调全市场 stock_zh_a_spot（数千只）拖慢启动。
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
+            test_df = ak.stock_zh_a_hist(
+                symbol="000001", period="daily",
+                start_date=start_date, end_date=end_date, adjust=""
+            )
+            if test_df is not None and not test_df.empty:
+                logger.info("AKShare连接测试成功（轻量探测）")
                 return True
             else:
-                st.warning("⚠️  AKShare连接测试返回空数据")
+                logger.warning("AKShare连接测试返回空数据")
                 return False
         except Exception as e:
-            st.error(f"❌ AKShare连接测试失败: {e}")
+            logger.error(f"AKShare连接测试失败: {e}")
             return False
 
 
