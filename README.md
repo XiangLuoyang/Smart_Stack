@@ -40,23 +40,60 @@ A 股纸面操盘工作台:账户 / 持仓 / 订单 / 撮合 / 风控 / 回测 /
 
 ## 快速开始
 
-### 1. 安装依赖
+### 方式一:Docker 一键启动(推荐)
+
+前置:本机已装 Docker 与 Docker Compose(`docker compose version` 能输出版本号即可)。
+
+```bash
+# 1. 准备环境变量(项目根已有 .env;没有则复制模板)
+#    cp .env.example .env  # Linux/macOS
+#    copy .env.example .env  # Windows
+
+# 2. 构建并启动后端 + 前端工作台
+docker compose up -d --build
+```
+
+启动后访问:
+
+- **工作台**:http://localhost:5173
+- **API 文档(Swagger)**:http://localhost:8000/docs
+
+常用命令:
+
+```bash
+docker compose logs -f          # 跟踪日志
+docker compose restart backend  # 重启后端
+docker compose down             # 停止并清理容器
+docker compose up -d --build    # 代码变更后重建
+```
+
+> 数据持久化:`./data` 目录通过卷挂载进容器,SQLite 与自选列表在宿主机保留,`docker compose down` 不会丢数据。
+
+> 旧版 Streamlit 单页应用(`smart-trade.py`)默认不启动;需要时附带拉起:
+> `docker compose --profile legacy up -d --build`,访问 http://localhost:8501。
+
+### 方式二:本地开发(不用 Docker)
+
+适合调试代码、热重载场景。需要 Python 3.12+ 与 Node 18+。
+
+#### 1. 安装依赖
 
 ```powershell
-# 后端(Python 3.12+)
+# 后端
 cd backend
 pip install -r requirements.txt
 
-# 前端(Node 18+)
+# 前端
 cd ..\frontend
 npm install
 ```
 
-国内网络建议加镜像:
-- pip: `-i https://pypi.tuna.tsinghua.edu.cn/simple`
-- npm: `npm config set registry https://registry.npmmirror.com`
+国内网络建议加镜像源:
 
-### 2. 配置
+- pip:`-i https://pypi.tuna.tsinghua.edu.cn/simple`
+- npm:`npm config set registry https://registry.npmmirror.com`
+
+#### 2. 配置
 
 ```powershell
 cd backend
@@ -64,19 +101,22 @@ copy .env.example .env
 # 按需编辑 .env:LLM_API_KEY(可选,信号源用)、DEBUG、费率等
 ```
 
-### 3. 一键启动
+#### 3. 启动
 
 Windows:
+
 ```powershell
 .\start_workbench.bat
 ```
 
 macOS / Linux:
+
 ```bash
 ./start_workbench.sh
 ```
 
 或分两个终端手动启动:
+
 ```powershell
 # 终端 1:后端
 cd backend; .\run.bat          # 或 bash run.sh
@@ -85,10 +125,18 @@ cd backend; .\run.bat          # 或 bash run.sh
 cd frontend; .\dev.bat
 ```
 
-### 4. 访问
+#### 4. 访问
 
 - **工作台**:http://localhost:5173
 - **API 文档(Swagger)**:http://localhost:8000/docs
+
+### 端口与服务对照
+
+| 服务 | 容器 | 端口 | 启动方式 |
+|------|------|------|----------|
+| 后端 API | `smart-stack-backend` | 8000 | 默认(Docker) / `backend/run.bat` |
+| 前端工作台 | `smart-stack-frontend` | 5173 | 默认(Docker) / `frontend/dev.bat` |
+| Streamlit 旧版 | `smart-stack-streamlit` | 8501 | `--profile legacy` / `streamlit run smart-trade.py` |
 
 ## 使用流程
 

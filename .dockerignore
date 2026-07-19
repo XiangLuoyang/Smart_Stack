@@ -1,0 +1,90 @@
+# 构建上下文瘦身:避免把本地虚拟环境 / 依赖 / 缓存塞进镜像
+.git
+.gitignore
+.cache
+.claude
+.agents
+.codex
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+.venv/
+venv/
+env/
+**/.venv/
+
+# Node / 前端本地依赖与产物
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+**/node_modules/
+
+# 数据库与运行时数据(由挂载卷接管,不进镜像)
+data/*.db
+data/*.sqlite*
+data/watchlist.json
+backend/**/*.db
+
+# 环境与机密(由 compose env_file / -e 注入)
+.env
+.env.*
+!.env.example
+backend/.env
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+**/*.swp
+**/*.swo
+.DS_Store
+Thumbs.db
+
+# 实验性 Dockerfile / 脚本(不参与工作台构建)
+Dockerfile.conda
+Dockerfile.ta-test
+
+# 测试与分析脚本(临时性产物,不影响运行)
+analyze_*.py
+test_*.py
+simple_*.py
+show_*.py
+quick_*.py
+core_function_test.py
+integration_test.py
+lightweight_test.py
+final_*.py
+update_version.py
+envconf_backup
+requirements_backup.txt
+README_backup.md
+README_legacy.md
+CHANGELOG.md
+CODE_REVIEW.md
+DEPLOYMENT_GUIDE.md
+OPTIMIZATION_SUMMARY.md
+PERFORMANCE_TEST_RESULT_ANALYSIS.md
+PROJECT_OVERVIEW.md
+PUBLISH_CHECKLIST.md
+FINAL_*_REPORT.md
+FINAL_*_GUIDE.md
+RELEASE_*.md
+TOP10_*.md
+top10_*.md
+~/
+start_workbench.bat
+start_workbench.sh
+auto_publish.sh
+COMPLETE_*.sh
+CREATE_*.sh
+ONE_CLICK_*.sh
+publish_to_github.sh
+RELEASE_QUICK_GUIDE.html
+*.tsbuildinfo
+.eslintcache
+VERSION
