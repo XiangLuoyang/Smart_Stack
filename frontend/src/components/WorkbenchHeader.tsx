@@ -1,19 +1,21 @@
-import { Button, Select, Space, Statistic, Tag, Tooltip } from "antd";
+import { Button, Select, Space, Statistic, Tooltip } from "antd";
 import { useEffect } from "react";
 import { useStore } from "../stores/useStore";
 import { createAccount } from "../api/client";
+import SymbolTag from "./SymbolTag";
 
 export default function WorkbenchHeader() {
   const accounts = useStore((s) => s.accounts);
   const currentAccountId = useStore((s) => s.currentAccountId);
   const selectAccount = useStore((s) => s.selectAccount);
   const overview = useStore((s) => s.overview);
+  const currentSymbol = useStore((s) => s.currentSymbol);
 
   const fmt = (n: number, dp = 2) =>
     n.toLocaleString("zh-CN", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
   const profit = overview?.floating_profit ?? 0;
-  const profitColor = profit > 0 ? "#f5222d" : profit < 0 ? "#52c41a" : "#999"; // A 股:红涨绿跌
+  const profitColor = profit > 0 ? "#ef5350" : profit < 0 ? "#26a69a" : "#9ba8b8";
 
   const handleNewAccount = async () => {
     const name = window.prompt("账户名称", "纸面账户");
@@ -25,7 +27,7 @@ export default function WorkbenchHeader() {
     await useStore.getState().loadAccounts();
   };
 
-  // 自动刷新概览(每 15 秒,保持浮动盈亏新鲜)
+  // auto-refresh overview every 15s
   useEffect(() => {
     const t = setInterval(() => {
       if (useStore.getState().currentAccountId) {
@@ -36,45 +38,72 @@ export default function WorkbenchHeader() {
   }, []);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 24, color: "#fff", height: 48 }}>
-      <div style={{ fontSize: 16, fontWeight: 600 }}>Smart Stack 操盘工作台</div>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 20,
+        height: 48,
+        padding: "0 16px",
+        background: "#0b0e14",
+        borderBottom: "1px solid #21262d",
+        color: "#e6edf3",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 4,
+            background: "linear-gradient(135deg,#2f7bff,#16c8a8)",
+          }}
+        />
+        <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: 0.5 }}>Smart Stack</span>
+      </div>
 
-      <Space>
-        <span style={{ color: "#bbb" }}>账户:</span>
+      <Space size={6}>
+        <span style={{ color: "#6e7681", fontSize: 11 }}>账户</span>
         <Select
           size="small"
-          style={{ width: 180 }}
+          style={{ width: 160 }}
           value={currentAccountId ?? undefined}
           onChange={selectAccount}
           options={accounts.map((a) => ({ value: a.id, label: a.name }))}
           placeholder="选择账户"
         />
-        <Button size="small" onClick={handleNewAccount}>新建</Button>
+        <Button size="small" onClick={handleNewAccount}>
+          新建
+        </Button>
       </Space>
 
-      <Space size="large">
+      {currentSymbol && (
+        <div style={{ display: "flex", alignItems: "center", padding: "0 8px", borderLeft: "1px solid #21262d", borderRight: "1px solid #21262d" }}>
+          <SymbolTag code={currentSymbol} strongName />
+        </div>
+      )}
+
+      <Space size={28} style={{ marginLeft: "auto" }}>
         <Statistic
-          title={<span style={{ color: "#bbb", fontSize: 12 }}>总资产</span>}
+          title={<span style={{ color: "#6e7681", fontSize: 11 }}>总资产</span>}
           value={overview ? fmt(overview.total_assets) : "--"}
-          valueStyle={{ color: "#fff", fontSize: 16 }}
+          valueStyle={{ color: "#e6edf3", fontSize: 15 }}
         />
         <Statistic
-          title={<span style={{ color: "#bbb", fontSize: 12 }}>可用现金</span>}
+          title={<span style={{ color: "#6e7681", fontSize: 11 }}>可用现金</span>}
           value={overview ? fmt(overview.cash) : "--"}
-          valueStyle={{ color: "#fff", fontSize: 16 }}
+          valueStyle={{ color: "#e6edf3", fontSize: 15 }}
         />
         <Statistic
-          title={<span style={{ color: "#bbb", fontSize: 12 }}>浮动盈亏</span>}
+          title={<span style={{ color: "#6e7681", fontSize: 11 }}>浮动盈亏</span>}
           value={overview ? `${profit >= 0 ? "+" : ""}${fmt(profit)}` : "--"}
-          valueStyle={{ color: profitColor, fontSize: 16 }}
+          valueStyle={{ color: profitColor, fontSize: 15 }}
         />
       </Space>
 
-      <div style={{ marginLeft: "auto" }}>
-        <Tooltip title="F1 买入  F2 卖出  Enter 确认  Esc 撤单">
-          <Tag color="blue">键盘下单</Tag>
-        </Tooltip>
-      </div>
+      <Tooltip title="F1 买入  F2 卖出  Enter 确认  Esc 撤单">
+        <span style={{ color: "#6e7681", fontSize: 11 }}>F1/F2 下单</span>
+      </Tooltip>
     </div>
   );
 }

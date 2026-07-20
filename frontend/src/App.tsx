@@ -1,14 +1,16 @@
 import { useEffect } from "react";
-import { Layout, message } from "antd";
+import { Layout, message, Tabs } from "antd";
 import WorkbenchHeader from "./components/WorkbenchHeader";
 import WatchlistPanel from "./components/WatchlistPanel";
 import MainPanel from "./components/MainPanel";
 import SidePanel from "./components/SidePanel";
+import AnalysisPanel from "./components/AnalysisPanel";
 import BottomTabs from "./components/BottomTabs";
+import ScreenerPanel from "./components/ScreenerPanel";
 import { useStore } from "./stores/useStore";
 import { useQuoteStream } from "./hooks/useQuoteStream";
 
-const { Header, Sider, Content, Footer } = Layout;
+const { Header, Sider, Content } = Layout;
 
 export default function App() {
   const loadAccounts = useStore((s) => s.loadAccounts);
@@ -22,7 +24,7 @@ export default function App() {
 
   useQuoteStream();
 
-  // 初次加载:账户 + 自选
+  // initial load: accounts + watchlist
   useEffect(() => {
     (async () => {
       try {
@@ -34,40 +36,49 @@ export default function App() {
     })();
   }, []);
 
-  // 切账户时重新拉数据
+  // re-fetch on account switch
   useEffect(() => {
     if (!currentAccountId) return;
     (async () => {
-      await Promise.all([
-        refreshOverview(),
-        loadOrders(),
-        loadTrades(),
-        loadRiskRule(),
-      ]);
+      await Promise.all([refreshOverview(), loadOrders(), loadTrades(), loadRiskRule()]);
     })();
   }, [currentAccountId]);
 
-  // 行情轮询(每 10 秒,SSE 兜底)
+  // quote polling fallback (every 10s, alongside SSE)
   useEffect(() => {
     const t = setInterval(refreshQuotes, 10_000);
     return () => clearInterval(t);
   }, [refreshQuotes]);
 
   return (
-    <Layout style={{ height: "100vh", overflow: "hidden" }}>
-      <Header style={{ height: 48, lineHeight: "48px", padding: "0 16px" }}>
+    <Layout style={{ height: "100vh", overflow: "hidden", background: "#0b0e14" }}>
+      <Header style={{ height: 48, lineHeight: "48px", padding: 0, background: "#0b0e14" }}>
         <WorkbenchHeader />
       </Header>
-      <Layout>
-        <Sider width={240} theme="light" style={{ overflow: "auto", background: "#f5f5f5" }}>
+      <Layout style={{ background: "#0b0e14" }}>
+        <Sider width={240} theme="dark" style={{ overflow: "hidden", background: "#0e1117", borderRight: "1px solid #21262d" }}>
+          <div style={{ padding: "8px 0 0", color: "#6e7681", fontSize: 11, paddingLeft: 12 }}>自选</div>
           <WatchlistPanel />
         </Sider>
-        <Content style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        <Content style={{ display: "flex", flexDirection: "column", overflow: "hidden", background: "#0b0e14" }}>
           <MainPanel />
           <BottomTabs />
         </Content>
-        <Sider width={360} theme="light" style={{ overflow: "auto", background: "#f5f5f5" }}>
-          <SidePanel />
+
+        <Sider width={360} theme="dark" style={{ overflow: "hidden", background: "#0e1117", borderLeft: "1px solid #21262d", height: "100%" }}>
+          <Tabs
+            size="small"
+            defaultActiveKey="analysis"
+            className="ant-tabs-fill-height"
+            style={{ padding: "0 4px" }}
+            tabBarStyle={{ margin: 0, padding: "0 8px" }}
+            items={[
+              { key: "analysis", label: "分析", children: <AnalysisPanel /> },
+              { key: "screener", label: "选股", children: <ScreenerPanel /> },
+              { key: "positions", label: "持仓", children: <SidePanel /> },
+            ]}
+          />
         </Sider>
       </Layout>
     </Layout>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStore } from "../stores/useStore";
 import { cancelOrder, listBacktestRuns, runBacktest, updateRiskRule } from "../api/client";
 import type { BacktestRun } from "../types";
+import SymbolTag from "./SymbolTag";
 
 const { RangePicker } = DatePicker;
 
@@ -23,7 +24,6 @@ export default function BottomTabs() {
   };
 
   const pendingOrders = orders.filter((o) => o.status === "PENDING");
-  const filledOrders = orders.filter((o) => ["FILLED", "REJECTED", "CANCELLED"].includes(o.status));
 
   const handleCancel = async (id: string) => {
     try {
@@ -39,8 +39,21 @@ export default function BottomTabs() {
     setBacktestRuns(await listBacktestRuns());
   };
 
+  const symCol = {
+    title: "标的",
+    dataIndex: "symbol",
+    width: 110,
+    render: (_: unknown, r: any) => <SymbolTag code={r.symbol} showCode={false} />,
+  };
+  const sideCol = {
+    title: "方向",
+    dataIndex: "side",
+    width: 60,
+    render: (v: string) => <Tag color={v === "BUY" ? "red" : "green"}>{v === "BUY" ? "买" : "卖"}</Tag>,
+  };
+
   return (
-    <div style={{ height: 240, borderTop: "1px solid #e8e8e8", background: "#fff" }}>
+    <div style={{ height: 240, borderTop: "1px solid #21262d", background: "#0e1117" }}>
       <Tabs
         defaultActiveKey="pending"
         size="small"
@@ -58,17 +71,20 @@ export default function BottomTabs() {
                 scroll={{ y: 140 }}
                 locale={{ emptyText: "无挂单" }}
                 columns={[
-                  { title: "时间", dataIndex: "created_at", width: 160, render: (v: string) => dayjs(v).format("MM-DD HH:mm:ss") },
-                  { title: "代码", dataIndex: "symbol", width: 90 },
-                  { title: "方向", dataIndex: "side", width: 70, render: (v: string) => <Tag color={v === "BUY" ? "red" : "green"}>{v === "BUY" ? "买" : "卖"}</Tag> },
-                  { title: "类型", dataIndex: "order_type", width: 70 },
-                  { title: "价格", dataIndex: "price", width: 80, align: "right" as const, render: (v: number | null) => v?.toFixed(2) ?? "--" },
-                  { title: "数量", dataIndex: "qty", width: 80, align: "right" as const },
-                  { title: "状态", dataIndex: "status", width: 80, render: (v: string) => <Tag color={statusColor[v]}>{v}</Tag> },
+                  { title: "时间", dataIndex: "created_at", width: 150, render: (v: string) => dayjs(v).format("MM-DD HH:mm:ss") },
+                  symCol,
+                  sideCol,
+                  { title: "类型", dataIndex: "order_type", width: 64 },
+                  { title: "价格", dataIndex: "price", width: 76, align: "right" as const, render: (v: number | null) => v?.toFixed(2) ?? "--" },
+                  { title: "数量", dataIndex: "qty", width: 76, align: "right" as const },
+                  { title: "状态", dataIndex: "status", width: 76, render: (v: string) => <Tag color={statusColor[v]}>{v}</Tag> },
                   {
-                    title: "操作", width: 80,
+                    title: "操作",
+                    width: 76,
                     render: (_: unknown, r: any) => (
-                      <Button size="small" danger onClick={() => handleCancel(r.id)}>撤单</Button>
+                      <Button size="small" danger onClick={() => handleCancel(r.id)}>
+                        撤单
+                      </Button>
                     ),
                   },
                 ]}
@@ -87,14 +103,14 @@ export default function BottomTabs() {
                 scroll={{ y: 140 }}
                 locale={{ emptyText: "无成交记录" }}
                 columns={[
-                  { title: "时间", dataIndex: "filled_at", width: 160, render: (v: string) => dayjs(v).format("MM-DD HH:mm:ss") },
-                  { title: "代码", dataIndex: "symbol", width: 90 },
-                  { title: "方向", dataIndex: "side", width: 70, render: (v: string) => <Tag color={v === "BUY" ? "red" : "green"}>{v === "BUY" ? "买" : "卖"}</Tag> },
-                  { title: "数量", dataIndex: "qty", width: 80, align: "right" as const },
-                  { title: "价格", dataIndex: "price", width: 80, align: "right" as const, render: (v: number) => v.toFixed(2) },
-                  { title: "佣金", dataIndex: "commission", width: 80, align: "right" as const, render: (v: number) => v.toFixed(2) },
-                  { title: "印花税", dataIndex: "stamp_duty", width: 80, align: "right" as const, render: (v: number) => v.toFixed(2) },
-                  { title: "过户费", dataIndex: "transfer_fee", width: 80, align: "right" as const, render: (v: number) => v.toFixed(2) },
+                  { title: "时间", dataIndex: "filled_at", width: 150, render: (v: string) => dayjs(v).format("MM-DD HH:mm:ss") },
+                  symCol,
+                  sideCol,
+                  { title: "数量", dataIndex: "qty", width: 76, align: "right" as const },
+                  { title: "价格", dataIndex: "price", width: 76, align: "right" as const, render: (v: number) => v.toFixed(2) },
+                  { title: "佣金", dataIndex: "commission", width: 76, align: "right" as const, render: (v: number) => v.toFixed(2) },
+                  { title: "印花税", dataIndex: "stamp_duty", width: 76, align: "right" as const, render: (v: number) => v.toFixed(2) },
+                  { title: "过户费", dataIndex: "transfer_fee", width: 76, align: "right" as const, render: (v: number) => v.toFixed(2) },
                 ]}
               />
             ),
@@ -110,8 +126,12 @@ export default function BottomTabs() {
             children: (
               <div style={{ padding: 8 }}>
                 <Space>
-                  <Button size="small" type="primary" onClick={() => setBacktestModal(true)}>新建回测</Button>
-                  <Button size="small" onClick={loadBacktestRuns}>刷新列表</Button>
+                  <Button size="small" type="primary" onClick={() => setBacktestModal(true)}>
+                    新建回测
+                  </Button>
+                  <Button size="small" onClick={loadBacktestRuns}>
+                    刷新列表
+                  </Button>
                 </Space>
                 <Table
                   size="small"
@@ -122,22 +142,32 @@ export default function BottomTabs() {
                   scroll={{ y: 120 }}
                   locale={{ emptyText: "点击刷新列表" }}
                   columns={[
-                    { title: "策略", dataIndex: "strategy_name", width: 100 },
-                    { title: "区间", width: 200, render: (_: unknown, r: BacktestRun) => `${dayjs(r.start).format("YYYY-MM-DD")} ~ ${dayjs(r.end).format("YYYY-MM-DD")}` },
-                    { title: "指标", render: (_: unknown, r: BacktestRun) => {
-                      try {
-                        const m = JSON.parse(r.metrics_json);
-                        return (
-                          <span style={{ fontSize: 12 }}>
-                            收益率 <b style={{ color: m.total_return >= 0 ? "#f5222d" : "#52c41a" }}>{(m.total_return * 100).toFixed(2)}%</b>
-                            {" "}夏普 {m.sharpe?.toFixed(2)}
-                            {" "}回撤 {(m.max_drawdown * 100).toFixed(1)}%
-                            {" "}胜率 {(m.win_rate * 100).toFixed(0)}%
-                            {" "}交易 {m.trade_count} 笔
-                          </span>
-                        );
-                      } catch { return "--"; }
-                    }},
+                    { title: "标的", dataIndex: "symbol", width: 100, render: (v: string) => <SymbolTag code={v} showCode={false} /> },
+                    { title: "策略", dataIndex: "strategy_name", width: 90 },
+                    {
+                      title: "区间",
+                      width: 200,
+                      render: (_: unknown, r: BacktestRun) => `${dayjs(r.start).format("YYYY-MM-DD")} ~ ${dayjs(r.end).format("YYYY-MM-DD")}`,
+                    },
+                    {
+                      title: "指标",
+                      render: (_: unknown, r: BacktestRun) => {
+                        try {
+                          const m = JSON.parse(r.metrics_json);
+                          return (
+                            <span style={{ fontSize: 12 }}>
+                              收益率 <b style={{ color: m.total_return >= 0 ? "#ef5350" : "#26a69a" }}>{(m.total_return * 100).toFixed(2)}%</b>
+                              {"  "}夏普 {m.sharpe?.toFixed(2)}
+                              {"  "}回撤 {(m.max_drawdown * 100).toFixed(1)}%
+                              {"  "}胜率 {(m.win_rate * 100).toFixed(0)}%
+                              {"  "}交易 {m.trade_count} 笔
+                            </span>
+                          );
+                        } catch {
+                          return "--";
+                        }
+                      },
+                    },
                   ]}
                 />
               </div>
@@ -173,12 +203,26 @@ function RiskRuleEditor() {
 
   return (
     <Form form={form} layout="inline" size="small" initialValues={riskRule} style={{ padding: 8, gap: 8 }}>
-      <Form.Item label="总仓位上限" name="max_position_pct"><InputNumber min={0} max={1} step={0.1} style={{ width: 80 }} /></Form.Item>
-      <Form.Item label="单票上限" name="max_single_pct"><InputNumber min={0} max={1} step={0.05} style={{ width: 80 }} /></Form.Item>
-      <Form.Item label="止损" name="stop_loss_pct"><InputNumber min={0} max={1} step={0.01} style={{ width: 80 }} /></Form.Item>
-      <Form.Item label="止盈" name="take_profit_pct"><InputNumber min={0} max={1} step={0.01} style={{ width: 80 }} /></Form.Item>
-      <Form.Item label="日内笔数" name="max_daily_trades"><InputNumber min={1} max={1000} style={{ width: 80 }} /></Form.Item>
-      <Form.Item><Button type="primary" onClick={handleSave}>保存</Button></Form.Item>
+      <Form.Item label="总仓位上限" name="max_position_pct">
+        <InputNumber min={0} max={1} step={0.1} style={{ width: 80 }} />
+      </Form.Item>
+      <Form.Item label="单票上限" name="max_single_pct">
+        <InputNumber min={0} max={1} step={0.05} style={{ width: 80 }} />
+      </Form.Item>
+      <Form.Item label="止损" name="stop_loss_pct">
+        <InputNumber min={0} max={1} step={0.01} style={{ width: 80 }} />
+      </Form.Item>
+      <Form.Item label="止盈" name="take_profit_pct">
+        <InputNumber min={0} max={1} step={0.01} style={{ width: 80 }} />
+      </Form.Item>
+      <Form.Item label="日内笔数" name="max_daily_trades">
+        <InputNumber min={1} max={1000} style={{ width: 80 }} />
+      </Form.Item>
+      <Form.Item>
+        <Button type="primary" onClick={handleSave}>
+          保存
+        </Button>
+      </Form.Item>
     </Form>
   );
 }
@@ -227,12 +271,16 @@ function BacktestModal({ open, onClose, defaultSymbol }: { open: boolean; onClos
           <InputNumber style={{ width: "100%" }} />
         </Form.Item>
         <Form.Item label="策略" name="strategy_name" rules={[{ required: true }]}>
-          <Select options={[{ value: "ma_cross", label: "双均线(fast 上穿 slow 买入)" }]} />
+          <Select options={[{ value: "ma_cross", label: "双均线 (fast 上穿 slow 买入)" }]} />
         </Form.Item>
         <Form.Item label="均线参数">
           <Space>
-            <Form.Item name="fast" noStyle><InputNumber addonBefore="fast" /></Form.Item>
-            <Form.Item name="slow" noStyle><InputNumber addonBefore="slow" /></Form.Item>
+            <Form.Item name="fast" noStyle>
+              <InputNumber addonBefore="fast" />
+            </Form.Item>
+            <Form.Item name="slow" noStyle>
+              <InputNumber addonBefore="slow" />
+            </Form.Item>
           </Space>
         </Form.Item>
         <Form.Item label="回测区间" name="range" rules={[{ required: true }]}>

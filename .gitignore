@@ -40,6 +40,8 @@ Thumbs.db
 # Runtime artifacts
 data/watchlist.json
 data/smartstack.db
+data/a_share_names.json
+data/screener_result.json
 
 # Backend (FastAPI + SQLite)
 backend/.venv/

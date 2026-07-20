@@ -77,7 +77,9 @@ class SignalService:
             )
             if result.get("error"):
                 return None
-            score = float(result.get("expected_return", 0.0))
+            # Use annualized return as the headline score (more interpretable than daily).
+            # Fall back to daily if the predictor didn't compute annualized.
+            score = float(result.get("annualized_return") or result.get("expected_daily_return") or 0.0)
             self.upsert(symbol, SOURCE_LSTM, score, result)
             return result
         except Exception as e:

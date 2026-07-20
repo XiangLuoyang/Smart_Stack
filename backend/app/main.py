@@ -16,7 +16,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import accounts, backtest, market, orders, risk_rules, signals, watchlist
+from app.api import accounts, backtest, indicators, market, orders, risk_rules, screener, signals, symbols, watchlist
+from pathlib import Path as _Path
+from dotenv import load_dotenv as _load_dotenv
+_PROJECT_ROOT = _Path(__file__).resolve().parents[2]
+# Load root .env first (real LLM_API_KEY lives there); backend/.env must not override it
+_load_dotenv(_PROJECT_ROOT / ".env", override=True)
+_load_dotenv(_PROJECT_ROOT / "backend" / ".env", override=False)
 from app.core.config import get_settings
 from app.db.base import init_db
 from app.jobs import start_scheduler, stop_scheduler
@@ -65,6 +71,9 @@ def create_app() -> FastAPI:
     app.include_router(signals.router)
     app.include_router(risk_rules.router)
     app.include_router(backtest.router)
+    app.include_router(screener.router)
+    app.include_router(symbols.router)
+    app.include_router(indicators.router)
     app.include_router(watchlist.router)
 
     @app.get("/api/health", tags=["meta"])

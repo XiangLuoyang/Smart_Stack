@@ -1,0 +1,35 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: #0b0e14;
+}
+
+/* Make AntD Tabs fill their container height so the active pane scrolls
+   instead of collapsing. Used by the right sider (分析/持仓) and could
+   be reused elsewhere. */
+.ant-tabs-fill-height {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.ant-tabs-fill-height > .ant-tabs-content-holder {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.ant-tabs-fill-height > .ant-tabs-content-holder > .ant-tabs-content {
+  height: 100%;
+}
+.ant-tabs-fill-height > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane {
+  height: 100%;
+  overflow: auto;
+}
+
+/* LLM report typography inside the analysis panel */
+.llm-report p { margin: 6px 0; }
+.llm-report h3 { font-size: 14px; margin: 8px 0 4px; color: #e6edf3; }
+.llm-report h4 { font-size: 13px; margin: 6px 0 3px; color: #c9d1d9; }
+.llm-report ul, .llm-report ol { padding-left: 18px; margin: 4px 0; }
+.llm-report li { margin: 2px 0; }
+.llm-report strong { color: #e6edf3; }
+.llm-report code { background: #1c2230; padding: 1px 4px; border-radius: 3px; font-size: 11px; }

@@ -1,9 +1,9 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import type { Account, AccountOverview, Order, PlaceOrderResult, Quote, RiskRule, Trade } from "../types";
 import * as api from "../api/client";
 
 interface AppState {
-  // 璐︽埛
+  // 账户
   accounts: Account[];
   currentAccountId: string | null;
   overview: AccountOverview | null;
@@ -11,31 +11,34 @@ interface AppState {
   selectAccount: (id: string) => void;
   refreshOverview: () => Promise<void>;
 
-  // 鑷€?+ 褰撳墠閫変腑鏍囩殑
+  // 自�?+ 当前选中标的
   watchlist: string[];
   currentSymbol: string | null;
+  symbolNames: Record<string, string>;
   loadWatchlist: () => Promise<void>;
   selectSymbol: (s: string) => void;
   addSymbol: (s: string) => Promise<void>;
   removeSymbol: (s: string) => Promise<void>;
+  loadSymbolNames: (codes: string[]) => Promise<void>;
+  setSymbolName: (code: string, name: string) => void;
 
-  // 琛屾儏缂撳瓨
+  // 行情缓存
   quotes: Record<string, Quote>;
   setQuote: (q: Quote) => void;
   setQuotes: (qs: Quote[]) => void;
   refreshQuotes: () => Promise<void>;
 
-  // 璁㈠崟 / 鎴愪氦
+  // 订单 / 成交
   orders: Order[];
   trades: Trade[];
   loadOrders: () => Promise<void>;
   loadTrades: () => Promise<void>;
 
-  // 椋庢帶
+  // 风控
   riskRule: RiskRule | null;
   loadRiskRule: () => Promise<void>;
 
-  // 涓嬪崟(杩斿洖鍚庣缁撴灉,鐢辩粍浠跺鐞嗘秷鎭彁绀?
+  // 下单(返回后端结果,由组件处理消息提�?
   placeOrder: (
     p: Omit<api.PlaceOrderPayload, "account_id">
   ) => Promise<PlaceOrderResult | null>;
@@ -47,6 +50,7 @@ export const useStore = create<AppState>((set, get) => ({
   overview: null,
   watchlist: [],
   currentSymbol: null,
+  symbolNames: {},
   quotes: {},
   orders: [],
   trades: [],
@@ -55,7 +59,7 @@ export const useStore = create<AppState>((set, get) => ({
   loadAccounts: async () => {
     const accounts = await api.listAccounts();
     set({ accounts });
-    // 自动选第一个账户
+    // �Զ�ѡ��һ���˻�
     const cur = get().currentAccountId;
     if (!cur && accounts.length > 0) {
       set({ currentAccountId: accounts[0].id });
@@ -79,6 +83,9 @@ export const useStore = create<AppState>((set, get) => ({
     if (!get().currentSymbol && watchlist.length > 0) {
       set({ currentSymbol: watchlist[0] });
     }
+    if (watchlist.length > 0) {
+      void get().loadSymbolNames(watchlist);
+    }
   },
 
   selectSymbol: (s) => set({ currentSymbol: s }),
@@ -86,7 +93,23 @@ export const useStore = create<AppState>((set, get) => ({
   addSymbol: async (s) => {
     const watchlist = await api.addToWatchlist(s);
     set({ watchlist });
+    void get().loadSymbolNames([s]);
   },
+
+  loadSymbolNames: async (codes) => {
+    if (codes.length === 0) return;
+    const need = codes.filter((c) => !get().symbolNames[c]);
+    if (need.length === 0) return;
+    try {
+      const names = await api.getSymbolNames(need);
+      set((st) => ({ symbolNames: { ...st.symbolNames, ...names } }));
+    } catch {
+      /* name lookup should never block the UI */
+    }
+  },
+
+  setSymbolName: (code, name) =>
+    set((st) => ({ symbolNames: { ...st.symbolNames, [code]: name } })),
 
   removeSymbol: async (s) => {
     const watchlist = await api.removeFromWatchlist(s);
@@ -141,7 +164,7 @@ export const useStore = create<AppState>((set, get) => ({
     const account_id = get().currentAccountId;
     if (!account_id) return null;
     const result = await api.placeOrder({ ...p, account_id });
-    // 涓嬪崟鍚庡埛鏂拌处鎴?+ 璁㈠崟
+    // 下单后刷新账�?+ 订单
     await Promise.all([get().refreshOverview(), get().loadOrders(), get().loadTrades()]);
     return result;
   },
