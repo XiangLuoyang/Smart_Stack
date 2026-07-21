@@ -18,6 +18,12 @@ from app.models.forecast import (
     PredictionSnapshot,
     ReviewResult,
 )
+from app.models.research import (
+    ResearchCase,
+    EvidenceEntry,
+    DecisionEntry,
+    ReviewNote,
+)
 
 __all__ = [
     "Account",
@@ -38,4 +44,8 @@ __all__ = [
     "ScreeningCandidate",
     "PredictionSnapshot",
     "ReviewResult",
+    "ResearchCase",
+    "EvidenceEntry",
+    "DecisionEntry",
+    "ReviewNote",
 ]
