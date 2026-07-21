@@ -14,6 +14,7 @@ A 股纸面操盘工作台:账户 / 持仓 / 订单 / 撮合 / 风控 / 回测 /
 - **K 线**:TradingView Lightweight Charts,MA5/MA20 叠加,成交量副图
 - **信号源**:LSTM 预期收益 + LLM 报告作为决策参考(只读,不自动下单)
 - **回测**:双均线策略,逐 bar 回放,输出净值曲线 / 夏普 / 最大回撤 / 胜率
+- **正式预测**:收盘后自动生成 10 个交易日正式预测 + 沪深300完整排名,到期按交易日历自动结算复盘(只读旁路,不自动下单)
 
 ## 架构
 
@@ -93,6 +94,8 @@ npm install
 - pip:`-i https://pypi.tuna.tsinghua.edu.cn/simple`
 - npm:`npm config set registry https://registry.npmmirror.com`
 
+> **数据库迁移**:schema 由 Alembic 版本化管理(`backend/migrations/versions/`),应用启动时自动执行 `alembic upgrade head` 建表/升级,通常无需手动操作。手动命令:`cd backend; alembic upgrade head`(升级)、`alembic check`(校验 ORM 模型与迁移一致)。
+
 #### 2. 配置
 
 ```powershell
@@ -163,7 +166,7 @@ $env:PYTHONPATH = "."
 python -m pytest tests/ -v
 ```
 
-覆盖:费用计算、撮合规则、风控拦截、持仓加权成本、订单全链路、回测引擎。
+覆盖:费用计算、撮合规则、风控拦截、持仓加权成本、订单全链路、回测引擎、交易日历、市场数据冻结与校验、预测引擎、筛选排名、到期结算,以及端到端验收(`test_forecast_pipeline_e2e.py`:冻结 → 筛选 → 预测 → 到期 → 结算)。完整阶段校验:`python -m pytest tests -q && alembic check`(后端)+ `cd ..\frontend && npm run build`(前端)。
 
 ## 目录结构
 
@@ -200,6 +203,45 @@ python -m pytest tests/ -v
 - **风控下单前拦截**,任一规则不通过即 REJECTED + 原因码
 - **信号源是只读旁路**,不自动触发下单,决策完全由人
 - **旧分析模块复用**,`src/data` / `src/models` 的纯计算迁移到 `backend/app/engine/`
+
+## 正式预测与研究管线
+
+收盘后自动生成「正式预测」并对沪深300做完整排名,到期按交易日历自动结算复盘。整条管线是**只读旁路**:只生成预测、筛选与复盘结果,**绝不自动下单**。
+
+### 每日研究调度
+
+| 任务 | 时间(Asia/Shanghai) | 说明 |
+|------|----------------------|------|
+| 每日研究 `daily_research` | 交易日 16:30 | 冻结当日行情 → 对沪深300成分生成正式预测 → 完整排名 |
+| 到期结算 `settlement` | 交易日 17:00 | 结算所有已到期预测,写入不可改写的复盘结果 |
+
+时间可在 `MarketConfig` 调整(`daily_research_hour/minute`、`settlement_hour/minute`)。
+
+### 预测契约
+
+- **期限**:每条正式预测 horizon 固定为 **10 个交易日**(按交易日历而非自然日);到期日 = 业务日之后第 10 个交易日。
+- **模型版本**:基准模型 `historical-10d-baseline @ 1.0.0`——确定性历史基准,相同输入产生相同输出,可复现、可回放。每条预测记录 `model_version_id`,前端展示模型名与版本。
+- **字段**:概率分布(p_up / p_flat / p_down)、收益中位数与 10/90 分位区间、预期超额收益、预期 MFE / MAE。
+- **结算**:到期后按第 1~10 个交易日计算实际收益、基准超额、符号误差、区间覆盖、MFE / MAE;缺少到期价格时置为 `PENDING_DATA`,不写零值。
+
+### 筛选运行状态(部分筛选语义)
+
+- `SUCCESS`:全部成分预测成功。
+- `PARTIAL`:部分成功、部分失败——失败候选记录稳定原因码(如 `STALE_DATA` / `INSUFFICIENT_HISTORY` / `PREDICT_ERROR:*`),成功者照常排名。
+- `FAILED`:无一成功。
+
+完整排名与 Top10:`GET /api/screener/runs/{id}`;预测历史(最新在前):`GET /api/forecasts/{symbol}`。
+
+### 本地手动扫描(不启用自动下单)
+
+研究管线与下单完全隔离,手动触发只生成预测/筛选/结算,不会下任何订单(需可访问 AkShare 拉取行情):
+
+```powershell
+cd backend
+python -c "from datetime import date; from app.db.base import SessionLocal; from app.services.market_service import MarketDataAdaptor; from app.services.screener_service import ScreeningPipeline; from app.jobs.daily_research import run_daily_research; print(run_daily_research(date(2026, 7, 21), SessionLocal, lambda s: ScreeningPipeline(s, MarketDataAdaptor())))"
+```
+
+把 `date(2026, 7, 21)` 换成目标业务日;传 `None` 则用当天。
 
 ## 不在本期范围
 
