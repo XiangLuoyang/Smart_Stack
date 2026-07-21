@@ -22,6 +22,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 from app.db.base import Base, upgrade_database
+import app.models  # noqa: F401  确保所有 ORM 模型注册到 Base.metadata
 
 
 @pytest.fixture
@@ -261,3 +262,28 @@ def due_prediction(trading_calendar_populated):
     trading_calendar_populated.add(pred)
     trading_calendar_populated.commit()
     return pred
+
+@pytest.fixture
+def seeded_predictions(db_session):
+    """为 000001 种入两个业务日的正式预测(2026-07-21 最新)。"""
+    from app.models.forecast import ModelVersion, PredictionSnapshot
+
+    model = ModelVersion(name="historical-10d-baseline", version="1.0.0")
+    db_session.add(model)
+    db_session.flush()
+    preds = []
+    for bd in [date(2026, 7, 20), date(2026, 7, 21)]:
+        p = PredictionSnapshot(
+            business_date=bd,
+            symbol="000001",
+            model_version_id=model.id,
+            horizon_days=10,
+            p_up=0.4, p_flat=0.2, p_down=0.4,
+            median_return=0.01, lower_return=-0.03, upper_return=0.05,
+            expected_excess_return=0.02, expected_mfe=0.04, expected_mae=-0.02,
+            state="PENDING",
+        )
+        db_session.add(p)
+        preds.append(p)
+    db_session.commit()
+    return preds

@@ -129,3 +129,47 @@ export interface BacktestRun {
   equity_curve_json: string | null;
   created_at: string;
 }
+
+// ===== 预测研究闭环(与后端 forecast schema 对齐) =====
+
+export interface ForecastSnapshot {
+  id: string;
+  business_date: string;
+  symbol: string;
+  model_version_id: string;
+  horizon_days: number;
+  p_up: number;
+  p_flat: number;
+  p_down: number;
+  median_return: number;
+  lower_return: number;
+  upper_return: number;
+  expected_excess_return: number;
+  expected_mfe: number;
+  expected_mae: number;
+  state: string;
+}
+
+export interface ScreeningCandidate {
+  id: string;
+  symbol: string;
+  rank: number;
+  score: number;
+  status: string;
+  failure_reason: string | null;
+  prediction_snapshot_id: string | null;
+}
+
+export interface ScreeningRun {
+  id: string;
+  business_date: string;
+  model_version_id: string;
+  model_version: string | null;
+  status: string;
+  total_count: number;
+  success_count: number;
+  failure_count: number;
+  data_cutoff: string | null;
+  candidates: ScreeningCandidate[];
+  top10: ScreeningCandidate[];
+}
