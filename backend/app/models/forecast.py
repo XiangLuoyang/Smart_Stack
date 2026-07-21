@@ -138,6 +138,10 @@ class ScreeningRun(Base, UUIDPk, TimestampMixin):
     failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    @property
+    def total_count(self) -> int:
+        return (self.success_count or 0) + (self.failure_count or 0)
+
 
 class ScreeningCandidate(Base, UUIDPk, TimestampMixin):
     """筛选候选:screening_run + symbol 唯一,关联预测快照。"""
@@ -158,6 +162,8 @@ class ScreeningCandidate(Base, UUIDPk, TimestampMixin):
     prediction_snapshot_id: Mapped[str | None] = mapped_column(
         ForeignKey("prediction_snapshots.id"), nullable=True
     )
+    status: Mapped[str] = mapped_column(String(16), default="SUCCESS", nullable=False)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class PredictionSnapshot(Base, UUIDPk, TimestampMixin):

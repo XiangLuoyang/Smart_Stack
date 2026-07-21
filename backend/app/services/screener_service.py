@@ -1,177 +1,187 @@
-"""沪深300选股服务:从 akshare 拉成分股,对每只计算预期年化收益,排序输出 Top N。
+"""沪深300筛选服务:数据库驱动的完整排名运行。
 
-- 池子来源: ak.index_stock_cons_csindex("000300") -> 300 只成分股(含代码+名称)
-- 评分: 复用 src.models.prediction.ReturnPredictor.calculate_expected_return
-- 任务化: scan 启动后台线程, status 轮询进度,结果存内存 + data/screener_result.json
+取代旧的内存/JSON 单例选股。每次运行冻结一批行情、对每个有效成分生成
+正式预测,按 expected_excess_return DESC / median_return DESC / symbol ASC
+排名,持久化全部成功与失败候选;以 (business_date, model_version_id) 幂等。
 """
 from __future__ import annotations
 
-import json
 import logging
-import threading
-import time
-from datetime import datetime
-from pathlib import Path
-from typing import Optional
+from datetime import date
 
-from app.core.config import DATA_DIR
+from sqlalchemy import case, select
+from sqlalchemy.orm import Session
+
+from app.models.forecast import (
+    MarketDataBatch,
+    ModelVersion,
+    ScreeningCandidate,
+    ScreeningRun,
+)
+from app.services.forecast_service import ForecastService, register_baseline_model
+from app.services.market_data_service import (
+    DEFAULT_INDEX_CODE,
+    MarketDataService,
+    UniverseMemberInput,
+)
 
 logger = logging.getLogger(__name__)
 
-_RESULT_FILE = DATA_DIR / "screener_result.json"
-_LOCK = threading.Lock()
 
+class ScreeningPipeline:
+    """生产用筛选管线:冻结行情 + 生成正式预测。
 
-class ScreenerJob:
-    """单例选股任务:同时只允许一个 scan 在跑。"""
+    members_provider 可注入以便测试/回放;默认从 akshare 拉取沪深300成分,
+    并附加基准指数代码,使基准日线一并被冻结供超额收益计算。
+    """
 
-    def __init__(self) -> None:
-        self.running = False
-        self.progress_total = 0
-        self.progress_done = 0
-        self.current_symbol = ""
-        self.started_at: Optional[float] = None
-        self.finished_at: Optional[float] = None
-        self.error: Optional[str] = None
-        self.result: Optional[dict] = None
+    def __init__(self, db: Session, adaptor, members_provider=None):
+        self.db = db
+        self.adaptor = adaptor
+        self._members_provider = members_provider or self._default_members
 
-    # ---- 池子 ----
-    def fetch_hs300_constituents(self) -> list[dict]:
-        """返回 [{code, name}],失败抛异常。"""
+    def _default_members(self, business_date: date) -> list[UniverseMemberInput]:
         import akshare as ak
-        df = ak.index_stock_cons_csindex(symbol="000300")
-        if df is None or df.empty:
-            return []
-        # 列名是中文,按位置或宽松匹配取「成分券代码」「成分券名称」
+
+        df = ak.index_stock_cons_csindex(symbol=DEFAULT_INDEX_CODE)
         cols = list(df.columns)
-        code_col = next((c for c in cols if "代码" in str(c)), cols[4] if len(cols) > 4 else cols[0])
-        name_col = next((c for c in cols if "名称" in str(c)), cols[5] if len(cols) > 5 else cols[1])
-        out = []
+        code_col = next((c for c in cols if "代码" in str(c)), cols[0])
+        name_col = next((c for c in cols if "名称" in str(c)), cols[1])
+        members: list[UniverseMemberInput] = []
         for _, row in df.iterrows():
             code = str(row.get(code_col, "")).strip()
             name = str(row.get(name_col, "")).strip()
-            if code and name:
-                out.append({"code": code, "name": name})
-        return out
+            if code:
+                members.append(UniverseMemberInput(code, name))
+        members.append(UniverseMemberInput(DEFAULT_INDEX_CODE, "沪深300"))
+        return members
 
-    # ---- 启动 ----
-    def start(self, top_n: int = 10, min_data_points: int = 60) -> str:
-        """启动后台扫描。返回 "started" / "already_running"。"""
-        with _LOCK:
-            if self.running:
-                return "already_running"
-            self.running = True
-            self.progress_done = 0
-            self.progress_total = 0
-            self.current_symbol = ""
-            self.started_at = time.time()
-            self.finished_at = None
-            self.error = None
-            self.result = None
-        t = threading.Thread(target=self._run, args=(top_n, min_data_points), daemon=True)
-        t.start()
-        logger.info("沪深300选股任务已启动")
-        return "started"
+    def freeze(self, business_date: date):
+        members = self._members_provider(business_date)
+        return MarketDataService(self.db, self.adaptor).freeze_daily_batch(
+            business_date, members
+        )
 
-    def _run(self, top_n: int, min_data_points: int) -> None:
-        try:
-            from src.models.prediction import ReturnPredictor
-            pool = self.fetch_hs300_constituents()
-            with _LOCK:
-                self.progress_total = len(pool)
-            logger.info("沪深300成分股拉取成功: %d 只", len(pool))
+    def predict(self, frozen, model_version_id: str, symbol: str):
+        model = self.db.get(ModelVersion, model_version_id)
+        if model is None:
+            model = register_baseline_model(self.db)
+        return ForecastService(self.db).create_formal_prediction(frozen, model, symbol)
 
-            predictor = ReturnPredictor()
-            scored: list[dict] = []
-            start_date = datetime(2020, 1, 1)
 
-            for i, item in enumerate(pool):
-                code = item["code"]
-                name = item["name"]
-                with _LOCK:
-                    self.progress_done = i
-                    self.current_symbol = code
-                try:
-                    res = predictor.calculate_expected_return(code, start_date, 30, 0.95)
-                    if res.get("error"):
-                        continue
-                    if (res.get("data_points") or 0) < min_data_points:
-                        continue
-                    scored.append({
-                        "code": code,
-                        "name": name,
-                        "score": float(res.get("annualized_return") or res.get("expected_daily_return") or 0.0),
-                        "daily_return": float(res.get("expected_daily_return") or 0.0),
-                        "daily_std": float(res.get("daily_std") or 0.0),
-                        "method": res.get("method", "statistical"),
-                        "data_points": res.get("data_points"),
-                        "ci": res.get("confidence_interval"),
-                    })
-                except Exception as e:
-                    logger.debug("选股评分失败 %s: %s", code, e)
+class ScreenerService:
+    """数据库驱动的筛选运行。pipeline 仅在 run() 时需要,读取操作可省略。"""
 
-            with _LOCK:
-                self.progress_done = len(pool)
-                self.current_symbol = ""
+    def __init__(self, db: Session, pipeline=None):
+        self.db = db
+        self.pipeline = pipeline
 
-            scored.sort(key=lambda x: x["score"], reverse=True)
-            buy = scored[:top_n]
-            sell = list(reversed(scored[-top_n:])) if len(scored) >= top_n else list(reversed(scored))
+    def run(self, business_date: date, model_version_id: str) -> ScreeningRun:
+        if self.pipeline is None:
+            raise ValueError("a screening pipeline is required to run a screen")
 
-            payload = {
-                "pool": "HS300",
-                "pool_size": len(pool),
-                "scored_count": len(scored),
-                "started_at": datetime.fromtimestamp(self.started_at or 0).isoformat(),
-                "finished_at": datetime.now().isoformat(),
-                "buy": buy,
-                "sell": sell,
-            }
-            with _LOCK:
-                self.result = payload
-                self.finished_at = time.time()
-                self.running = False
+        existing = self.db.scalars(
+            select(ScreeningRun).where(
+                ScreeningRun.business_date == business_date,
+                ScreeningRun.model_version_id == model_version_id,
+            )
+        ).first()
+        if existing is not None:
+            return existing
+
+        frozen = self.pipeline.freeze(business_date)
+        failures: dict[str, str] = dict(frozen.failures)
+        candidate_symbols = [s for s in frozen.valid_symbols if s != DEFAULT_INDEX_CODE]
+
+        successes: list[tuple[str, object]] = []
+        for symbol in candidate_symbols:
             try:
-                _RESULT_FILE.parent.mkdir(parents=True, exist_ok=True)
-                _RESULT_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            except Exception as e:
-                logger.warning("写选股结果文件失败: %s", e)
-            logger.info("沪深300选股完成: 评分 %d 只, buy %d sell %d", len(scored), len(buy), len(sell))
-        except Exception as e:
-            logger.error("选股任务异常: %s", e, exc_info=True)
-            with _LOCK:
-                self.error = str(e)
-                self.running = False
-                self.finished_at = time.time()
+                prediction = self.pipeline.predict(frozen, model_version_id, symbol)
+                successes.append((symbol, prediction))
+            except Exception as exc:  # noqa: BLE001 预测失败记为失败候选
+                failures[symbol] = f"PREDICT_ERROR:{exc}"
 
-    # ---- 状态查询 ----
-    def status(self) -> dict:
-        with _LOCK:
-            base = {
-                "running": self.running,
-                "progress_done": self.progress_done,
-                "progress_total": self.progress_total,
-                "current_symbol": self.current_symbol,
-                "started_at": self.started_at,
-                "finished_at": self.finished_at,
-                "error": self.error,
-            }
-        # 如果内存里没结果但磁盘有(进程重启后),尝试加载
-        if self.result is None and not self.running and _RESULT_FILE.exists():
-            try:
-                base["result"] = json.loads(_RESULT_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+        successes.sort(
+            key=lambda item: (
+                -item[1].expected_excess_return,
+                -item[1].median_return,
+                item[0],
+            )
+        )
+
+        success_count = len(successes)
+        failure_count = len(failures)
+        if success_count == 0:
+            run_status = "FAILED"
+        elif failure_count == 0:
+            run_status = "SUCCESS"
         else:
-            base["result"] = self.result
-        return base
+            run_status = "PARTIAL"
 
+        run = ScreeningRun(
+            business_date=business_date,
+            model_version_id=model_version_id,
+            market_data_batch_id=frozen.batch_id,
+            status=run_status,
+            success_count=success_count,
+            failure_count=failure_count,
+            failure_reason=None,
+        )
+        self.db.add(run)
+        self.db.flush()
 
-_singleton: Optional[ScreenerJob] = None
+        for rank, (symbol, prediction) in enumerate(successes, start=1):
+            self.db.add(
+                ScreeningCandidate(
+                    screening_run_id=run.id,
+                    symbol=symbol,
+                    rank=rank,
+                    score=float(prediction.expected_excess_return),
+                    prediction_snapshot_id=prediction.id,
+                    status="SUCCESS",
+                    failure_reason=None,
+                )
+            )
+        for symbol, reason in failures.items():
+            self.db.add(
+                ScreeningCandidate(
+                    screening_run_id=run.id,
+                    symbol=symbol,
+                    rank=0,
+                    score=0.0,
+                    prediction_snapshot_id=None,
+                    status="FAILED",
+                    failure_reason=reason,
+                )
+            )
+        self.db.commit()
+        return run
 
+    def list_candidates(self, run_id: str) -> list[ScreeningCandidate]:
+        status_order = case(
+            (ScreeningCandidate.status == "SUCCESS", 0), else_=1
+        )
+        return list(
+            self.db.scalars(
+                select(ScreeningCandidate)
+                .where(ScreeningCandidate.screening_run_id == run_id)
+                .order_by(
+                    status_order,
+                    ScreeningCandidate.rank.asc(),
+                    ScreeningCandidate.symbol.asc(),
+                )
+            ).all()
+        )
 
-def get_screener() -> ScreenerJob:
-    global _singleton
-    if _singleton is None:
-        _singleton = ScreenerJob()
-    return _singleton
+    def list_runs(self, limit: int = 20, offset: int = 0) -> list[ScreeningRun]:
+        return list(
+            self.db.scalars(
+                select(ScreeningRun)
+                .order_by(ScreeningRun.business_date.desc())
+                .limit(limit)
+                .offset(offset)
+            ).all()
+        )
+
+    def get_run(self, run_id: str) -> ScreeningRun | None:
+        return self.db.get(ScreeningRun, run_id)
