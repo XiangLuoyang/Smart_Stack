@@ -7,6 +7,17 @@ from app.models.risk_rule import RiskRule
 from app.models.market_snapshot import MarketSnapshot
 from app.models.signal import Signal
 from app.models.backtest import BacktestRun, BacktestTrade
+from app.models.forecast import (
+    MarketDataBatch,
+    DailyBar,
+    UniverseSnapshot,
+    TradingCalendar,
+    ModelVersion,
+    ScreeningRun,
+    ScreeningCandidate,
+    PredictionSnapshot,
+    ReviewResult,
+)
 
 __all__ = [
     "Account",
@@ -18,4 +29,13 @@ __all__ = [
     "Signal",
     "BacktestRun",
     "BacktestTrade",
+    "MarketDataBatch",
+    "DailyBar",
+    "UniverseSnapshot",
+    "TradingCalendar",
+    "ModelVersion",
+    "ScreeningRun",
+    "ScreeningCandidate",
+    "PredictionSnapshot",
+    "ReviewResult",
 ]

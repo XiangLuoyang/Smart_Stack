@@ -18,7 +18,8 @@ import pytest
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
-from app.db.base import Base
+from app.core.config import get_settings
+from app.db.base import Base, upgrade_database
 
 
 @pytest.fixture
@@ -36,3 +37,18 @@ def db_session():
     finally:
         session.close()
         Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def migrated_engine(tmp_path, monkeypatch):
+    """在临时 SQLite 文件上运行 Alembic 迁移,返回已迁移的引擎。"""
+    url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    monkeypatch.setenv("DB_URL", url)
+    get_settings.cache_clear()
+    upgrade_database(url)
+    engine = create_engine(url, connect_args={"check_same_thread": False})
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        get_settings.cache_clear()
