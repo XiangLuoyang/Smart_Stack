@@ -167,3 +167,97 @@ def seeded_run(db_session, screening_pipeline):
     return ScreenerService(db_session, screening_pipeline).run(
         date(2026, 7, 21), screening_pipeline.model_id
     )
+
+# ---------------- 交易日历与结算 fixture ----------------
+
+
+def _populate_2026_calendar(db):
+    """填充 2026 年交易日(工作日去除国庆 10/1-10/7 休市)。"""
+    from datetime import timedelta
+
+    from app.models.forecast import TradingCalendar as TradingCalendarRow
+
+    holidays = {
+        date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3),
+        date(2026, 10, 4), date(2026, 10, 5), date(2026, 10, 6),
+        date(2026, 10, 7),
+    }
+    d = date(2026, 1, 1)
+    end = date(2026, 12, 31)
+    while d <= end:
+        if d.weekday() < 5 and d not in holidays:
+            db.add(TradingCalendarRow(session_date=d))
+        d += timedelta(days=1)
+    db.commit()
+
+
+@pytest.fixture
+def trading_calendar_populated(db_session):
+    _populate_2026_calendar(db_session)
+    return db_session
+
+
+@pytest.fixture
+def calendar(trading_calendar_populated):
+    from app.engine.trading_calendar import TradingCalendar
+
+    return TradingCalendar(trading_calendar_populated)
+
+
+class FakeBars:
+    """按 (symbol, date) 返回复权收盘价的可控数据源。"""
+
+    def __init__(self, data):
+        self._data = data
+
+    def adjusted_close(self, symbol, on_date):
+        return self._data.get((symbol, on_date))
+
+
+@pytest.fixture
+def bars():
+    stock = {
+        date(2026, 7, 21): 10.0, date(2026, 7, 22): 10.1, date(2026, 7, 23): 10.2,
+        date(2026, 7, 24): 10.3, date(2026, 7, 27): 10.4, date(2026, 7, 28): 10.5,
+        date(2026, 7, 29): 10.4, date(2026, 7, 30): 10.5, date(2026, 7, 31): 10.6,
+        date(2026, 8, 3): 10.7, date(2026, 8, 4): 10.8,
+    }
+    bench = {date(2026, 7, 21): 4000.0, date(2026, 8, 4): 4040.0}
+    data = {}
+    for d, v in stock.items():
+        data[("000001", d)] = v
+    for d, v in bench.items():
+        data[("000300", d)] = v
+    return FakeBars(data)
+
+
+@pytest.fixture
+def empty_bars():
+    return FakeBars({})
+
+
+@pytest.fixture
+def due_prediction(trading_calendar_populated):
+    """business_date=2026-07-21,10 个交易日到期日恰为 2026-08-04。"""
+    from app.models.forecast import PredictionSnapshot
+
+    pred = PredictionSnapshot(
+        business_date=date(2026, 7, 21),
+        symbol="000001",
+        model_version_id="model-x",
+        market_data_batch_id=None,
+        horizon_days=10,
+        p_up=0.5,
+        p_flat=0.2,
+        p_down=0.3,
+        median_return=0.02,
+        lower_return=-0.01,
+        upper_return=0.05,
+        expected_excess_return=0.03,
+        expected_mfe=0.06,
+        expected_mae=-0.02,
+        state="PENDING",
+    )
+    trading_calendar_populated.add(pred)
+    trading_calendar_populated.commit()
+    return pred
