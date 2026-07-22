@@ -149,3 +149,29 @@ export const getIndicators = (symbol: string, days = 120) =>
     .then((r) => r.data);
 
 export default http;
+// ===== Phase 2: 研究闭环 =====
+import type { CaseCreate, CaseSummary, ResearchCaseDetail, StockResearchView } from "../types";
+
+export const getStockResearch = (symbol: string, as_of?: string) =>
+  http.get<StockResearchView>(`/research/stocks/${symbol}`, { params: { as_of } }).then((r) => r.data);
+
+export const createResearchCase = (payload: CaseCreate) =>
+  http.post<CaseSummary>("/research/cases", payload).then((r) => r.data);
+
+export const listResearchCases = (params?: { symbol?: string; status?: string }) =>
+  http.get<CaseSummary[]>("/research/cases", { params }).then((r) => r.data);
+
+export const getResearchCase = (caseId: string) =>
+  http.get<ResearchCaseDetail>(`/research/cases/${caseId}`).then((r) => r.data);
+
+export const appendEvidence = (caseId: string, payload: { stance: string; category: string; content: string; source_label?: string; source_url?: string; observed_date: string; created_by?: string }) =>
+  http.post(`/research/cases/${caseId}/evidence`, payload).then((r) => r.data);
+
+export const appendDecision = (caseId: string, payload: { direction: string; action: string; rationale: string; confidence: number }) =>
+  http.post(`/research/cases/${caseId}/decisions`, payload).then((r) => r.data);
+
+export const appendReviewNote = (caseId: string, payload: { content: string; attribution_json?: string; error_tags_json?: string; created_by?: string }) =>
+  http.post(`/research/cases/${caseId}/reviews`, payload).then((r) => r.data);
+
+export const closeResearchCase = (caseId: string) =>
+  http.post(`/research/cases/${caseId}/close`).then((r) => r.data);
