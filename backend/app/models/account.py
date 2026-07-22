@@ -13,6 +13,7 @@ class Account(Base, UUIDPk, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     cash: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    reserved_cash: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="ACTIVE", nullable=False)
     # ACTIVE / FROZEN / CLOSED
 

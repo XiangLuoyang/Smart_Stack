@@ -15,6 +15,7 @@ class Position(Base, UUIDPk, TimestampMixin):
     account_id: Mapped[str] = mapped_column(String(32), ForeignKey("accounts.id"), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     qty: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    reserved_qty: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     # avg_cost: 加权平均成本(不含费用),用于浮动盈亏计算
     avg_cost: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     # stop_loss / take_profit: 用户设置的止损止盈价,NULL 表示未设置
