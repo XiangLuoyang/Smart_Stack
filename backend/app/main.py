@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import accounts, backtest, forecasts, indicators, market, operations, orders, performance, research, reviews, risk_rules, screener, signals, symbols, watchlist
+from app.api import accounts, backtest, forecasts, health, indicators, market, operations, orders, performance, research, reviews, risk_rules, screener, signals, symbols, watchlist
 from pathlib import Path as _Path
 from dotenv import load_dotenv as _load_dotenv
 _PROJECT_ROOT = _Path(__file__).resolve().parents[2]
@@ -80,10 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(research.router)
     app.include_router(operations.router)
     app.include_router(performance.router)
-
-    @app.get("/api/health", tags=["meta"])
-    def health() -> dict:
-        return {"status": "ok", "name": settings.app_name, "version": "2.0.0"}
+    app.include_router(health.router)
 
     return app
 
