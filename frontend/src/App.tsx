@@ -4,6 +4,7 @@ import AppNavigation from "./components/AppNavigation";
 import TodayPage from "./pages/TodayPage";
 import ScreenerPage from "./pages/ScreenerPage";
 import StockResearchPage from "./pages/StockResearchPage";
+import ResearchCasesPage from "./pages/ResearchCasesPage";
 import { useStore } from "./stores/useStore";
 import type { NavigationState, WorkspacePage } from "./types";
 
@@ -39,7 +40,7 @@ export default function App() {
       case "stock":
         return <StockResearchPage symbol={nav.symbol} />;
       case "cases":
-        return <PlaceholderPage title="研究案例" />;
+        return <ResearchCasesPage />;
       case "reviews":
         return <PlaceholderPage title="复盘" />;
       case "performance":
