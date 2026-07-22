@@ -257,3 +257,29 @@ python -c "from datetime import date; from app.db.base import SessionLocal; from
 ## License
 
 MIT
+
+## Phase 2: 研究闭环
+
+### 每日研究工作流
+
+1. **筛选** — 每日 16:30 冻结行情、17:00 运行沪深300筛选,产出 Top 10 正式预测(10 交易日期限)
+2. **单股研究** — `GET /api/research/stocks/{symbol}` 组合行情、K线、预测、技术指标、风险、LLM 报告、历史预测与研究案例
+3. **创建案例** — `POST /api/research/cases` 绑定预测、冻结分析快照、记录初始决策
+4. **追加证据/决策** — `POST /cases/{id}/evidence`、`POST /cases/{id}/decisions`(append-only,决策通过 supersedes 链追踪观点演变)
+5. **到期结算** — `POST /api/reviews/settle` 按交易日历自动计算实际收益、MFE/MAE、方向正确性
+6. **复盘笔记** — `POST /api/reviews/{prediction_id}/notes` 记录归因与误差标签,不修改市场事实
+
+### 核心约束
+
+- **Append-only**:正式预测、证据、决策、复盘笔记一旦写入不可改写;仅案例状态(关闭)允许更新
+- **LLM 降级**:LLM 服务不可用时 `llm.status=UNAVAILABLE`,量化板块(预测/技术/风险)不受影响
+- **缺失 ≠ 零**:任何板块数据缺失映射为 `None`/`UNAVAILABLE`,绝不填充零值
+- **外键 RESTRICT**:禁止删除仍被引用的预测/候选/案例
+
+### 复盘误差标签
+
+`MODEL_DIRECTION` | `MODEL_MAGNITUDE` | `THESIS` | `TIMING` | `EARLY_ENTRY` | `LATE_ENTRY` | `EARLY_EXIT` | `LATE_EXIT` | `DISCIPLINE` | `DATA_QUALITY`
+
+### 前端导航
+
+主导航:今日 → 沪深300 → 单股研究 → 研究案例 → 复盘 → 模型表现;模拟操作与设置位于分隔线后。
