@@ -133,3 +133,21 @@ def ranking_metrics(
         "top_n_return": top_n_return(ranks, actual, top_n),
         "top_n_excess_return": top_n_excess_return(ranks, actual, benchmark, top_n),
     }
+
+def execution_increment(
+    decision_return: Sequence[float],
+    actual_execution_return: Sequence[float],
+) -> MetricResult:
+    """执行增量:实际执行收益 vs 决策时预期收益的差值。
+
+    正值表示执行优于决策(好的时机/价格),负值表示执行损耗。
+    """
+    pairs = [
+        (d, e)
+        for d, e in zip(decision_return, actual_execution_return)
+        if d is not None and e is not None
+    ]
+    if not pairs:
+        return MetricResult(None, 0)
+    increments = [e - d for d, e in pairs]
+    return MetricResult(float(np.mean(increments)), len(pairs))

@@ -77,3 +77,15 @@ class TestRankingMetrics:
         out = ranking_metrics(ranks=[1, 2, 11], actual=[0.10, 0.00, 0.50], benchmark=0.02)
         assert out["top_n_return"].value == pytest.approx(0.05)
         assert out["top_n_excess_return"].value == pytest.approx(0.03)
+
+class TestExecutionIncrement:
+    def test_positive_increment(self):
+        from app.engine.performance_metrics import execution_increment
+        result = execution_increment([0.02, 0.01, -0.01], [0.03, 0.015, 0.0])
+        assert result.value == pytest.approx((0.01 + 0.005 + 0.01) / 3)
+        assert result.sample_count == 3
+
+    def test_empty_returns_none(self):
+        from app.engine.performance_metrics import execution_increment
+        result = execution_increment([], [])
+        assert result.value is None

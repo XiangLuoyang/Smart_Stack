@@ -19,6 +19,7 @@ from app.models.forecast import (
     ReviewResult,
 )
 from app.models.order_preview import OrderPreview
+from app.models.task_run import TaskRun
 from app.models.performance import (
     MetricBatch,
     ModelEvaluationRun,
