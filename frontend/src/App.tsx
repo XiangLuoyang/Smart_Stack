@@ -6,6 +6,7 @@ import ScreenerPage from "./pages/ScreenerPage";
 import StockResearchPage from "./pages/StockResearchPage";
 import ResearchCasesPage from "./pages/ResearchCasesPage";
 import ReviewCenterPage from "./pages/ReviewCenterPage";
+import OperationsPage from "./pages/OperationsPage";
 import { useStore } from "./stores/useStore";
 import type { NavigationState, WorkspacePage } from "./types";
 
