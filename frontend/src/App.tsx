@@ -5,6 +5,7 @@ import TodayPage from "./pages/TodayPage";
 import ScreenerPage from "./pages/ScreenerPage";
 import StockResearchPage from "./pages/StockResearchPage";
 import ResearchCasesPage from "./pages/ResearchCasesPage";
+import ReviewCenterPage from "./pages/ReviewCenterPage";
 import { useStore } from "./stores/useStore";
 import type { NavigationState, WorkspacePage } from "./types";
 
@@ -42,7 +43,7 @@ export default function App() {
       case "cases":
         return <ResearchCasesPage />;
       case "reviews":
-        return <PlaceholderPage title="复盘" />;
+        return <ReviewCenterPage />;
       case "performance":
         return <PlaceholderPage title="模型表现" />;
       case "operations":
