@@ -39,6 +39,12 @@ class MarketConfig(BaseSettings):
     stop_loss_scan_seconds: int = 30
     snapshot_retention_days: int = 30
 
+    # 每日研究管线调度(Asia/Shanghai 时区)
+    daily_research_hour: int = 16
+    daily_research_minute: int = 30
+    settlement_hour: int = 17
+    settlement_minute: int = 0
+
 
 class Settings(BaseSettings):
     """全局配置入口。"""

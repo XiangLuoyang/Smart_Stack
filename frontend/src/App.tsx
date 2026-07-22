@@ -1,86 +1,70 @@
-import { useEffect } from "react";
-import { Layout, message, Tabs } from "antd";
-import WorkbenchHeader from "./components/WorkbenchHeader";
-import WatchlistPanel from "./components/WatchlistPanel";
-import MainPanel from "./components/MainPanel";
-import SidePanel from "./components/SidePanel";
-import AnalysisPanel from "./components/AnalysisPanel";
-import BottomTabs from "./components/BottomTabs";
-import ScreenerPanel from "./components/ScreenerPanel";
+import { useEffect, useState } from "react";
+import { Layout, Typography } from "antd";
+import AppNavigation from "./components/AppNavigation";
+import TodayPage from "./pages/TodayPage";
+import ScreenerPage from "./pages/ScreenerPage";
+import StockResearchPage from "./pages/StockResearchPage";
+import ResearchCasesPage from "./pages/ResearchCasesPage";
+import ReviewCenterPage from "./pages/ReviewCenterPage";
+import OperationsPage from "./pages/OperationsPage";
+import PerformancePage from "./pages/PerformancePage";
 import { useStore } from "./stores/useStore";
-import { useQuoteStream } from "./hooks/useQuoteStream";
+import type { NavigationState, WorkspacePage } from "./types";
 
-const { Header, Sider, Content } = Layout;
+const { Sider, Content } = Layout;
+const { Text } = Typography;
+
+function PlaceholderPage({ title }: { title: string }) {
+  return (
+    <div style={{ padding: 24 }}>
+      <Text style={{ color: "#8b949e" }}>{title} - 尚未启用</Text>
+    </div>
+  );
+}
 
 export default function App() {
-  const loadAccounts = useStore((s) => s.loadAccounts);
-  const loadWatchlist = useStore((s) => s.loadWatchlist);
-  const currentAccountId = useStore((s) => s.currentAccountId);
-  const refreshOverview = useStore((s) => s.refreshOverview);
-  const loadOrders = useStore((s) => s.loadOrders);
-  const loadTrades = useStore((s) => s.loadTrades);
-  const loadRiskRule = useStore((s) => s.loadRiskRule);
-  const refreshQuotes = useStore((s) => s.refreshQuotes);
+  const [nav, setNav] = useState<NavigationState>({ page: "today" });
+  const currentSymbol = useStore((s) => s.currentSymbol);
 
-  useQuoteStream();
+  const navigate = (page: WorkspacePage) => setNav({ page });
 
-  // initial load: accounts + watchlist
   useEffect(() => {
-    (async () => {
-      try {
-        await loadAccounts();
-        await loadWatchlist();
-      } catch (e: any) {
-        message.error("初始化失败:" + (e?.message ?? e));
-      }
-    })();
-  }, []);
+    if (currentSymbol && nav.page === "screener") {
+      setNav({ page: "stock", symbol: currentSymbol });
+    }
+  }, [currentSymbol]);
 
-  // re-fetch on account switch
-  useEffect(() => {
-    if (!currentAccountId) return;
-    (async () => {
-      await Promise.all([refreshOverview(), loadOrders(), loadTrades(), loadRiskRule()]);
-    })();
-  }, [currentAccountId]);
-
-  // quote polling fallback (every 10s, alongside SSE)
-  useEffect(() => {
-    const t = setInterval(refreshQuotes, 10_000);
-    return () => clearInterval(t);
-  }, [refreshQuotes]);
+  const renderPage = () => {
+    switch (nav.page) {
+      case "today":
+        return <TodayPage />;
+      case "screener":
+        return <ScreenerPage />;
+      case "stock":
+        return <StockResearchPage symbol={nav.symbol} />;
+      case "cases":
+        return <ResearchCasesPage />;
+      case "reviews":
+        return <ReviewCenterPage />;
+      case "performance":
+        return <PlaceholderPage title="模型表现" />;
+      case "operations":
+        return <PlaceholderPage title="模拟操作" />;
+      case "settings":
+        return <PlaceholderPage title="设置" />;
+      default:
+        return <TodayPage />;
+    }
+  };
 
   return (
     <Layout style={{ height: "100vh", overflow: "hidden", background: "#0b0e14" }}>
-      <Header style={{ height: 48, lineHeight: "48px", padding: 0, background: "#0b0e14" }}>
-        <WorkbenchHeader />
-      </Header>
-      <Layout style={{ background: "#0b0e14" }}>
-        <Sider width={240} theme="dark" style={{ overflow: "hidden", background: "#0e1117", borderRight: "1px solid #21262d" }}>
-          <div style={{ padding: "8px 0 0", color: "#6e7681", fontSize: 11, paddingLeft: 12 }}>自选</div>
-          <WatchlistPanel />
-        </Sider>
-
-        <Content style={{ display: "flex", flexDirection: "column", overflow: "hidden", background: "#0b0e14" }}>
-          <MainPanel />
-          <BottomTabs />
-        </Content>
-
-        <Sider width={360} theme="dark" style={{ overflow: "hidden", background: "#0e1117", borderLeft: "1px solid #21262d", height: "100%" }}>
-          <Tabs
-            size="small"
-            defaultActiveKey="analysis"
-            className="ant-tabs-fill-height"
-            style={{ padding: "0 4px" }}
-            tabBarStyle={{ margin: 0, padding: "0 8px" }}
-            items={[
-              { key: "analysis", label: "分析", children: <AnalysisPanel /> },
-              { key: "screener", label: "选股", children: <ScreenerPanel /> },
-              { key: "positions", label: "持仓", children: <SidePanel /> },
-            ]}
-          />
-        </Sider>
-      </Layout>
+      <Sider width={180} theme="dark" style={{ background: "#0e1117", borderRight: "1px solid #21262d", overflow: "auto" }}>
+        <AppNavigation current={nav} onNavigate={navigate} />
+      </Sider>
+      <Content style={{ overflow: "hidden", background: "#0b0e14" }}>
+        {renderPage()}
+      </Content>
     </Layout>
   );
 }

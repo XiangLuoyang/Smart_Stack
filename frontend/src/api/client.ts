@@ -3,11 +3,13 @@ import type {
   Account,
   AccountOverview,
   BacktestRun,
+  ForecastSnapshot,
   KlineBar,
   Order,
   PlaceOrderResult,
   Quote,
   RiskRule,
+  ScreeningRun,
   SignalOut,
   Trade,
 } from "../types";
@@ -92,44 +94,17 @@ export const addToWatchlist = (symbol: string) =>
 export const removeFromWatchlist = (symbol: string) =>
   http.delete<string[]>(`/watchlist/${symbol}`).then((r) => r.data);
 
-// 沪深300选股
-export interface ScreenerItem {
-  code: string;
-  name: string;
-  score: number;
-  daily_return: number;
-  daily_std: number;
-  method: string;
-  data_points?: number;
-  ci?: { lower: number; upper: number } | null;
-}
-export interface ScreenerResult {
-  pool: string;
-  pool_size: number;
-  scored_count: number;
-  started_at?: string;
-  finished_at?: string;
-  buy: ScreenerItem[];
-  sell: ScreenerItem[];
-}
-export interface ScreenerStatus {
-  running: boolean;
-  progress_done: number;
-  progress_total: number;
-  current_symbol: string;
-  started_at: number | null;
-  finished_at: number | null;
-  error: string | null;
-  result: ScreenerResult | null;
-}
-export const startScreener = (top_n = 10) =>
-  http
-    .post<ScreenerStatus>("/screener/scan", null, { params: { top_n } })
-    .then((r) => r.data);
-export const getScreenerStatus = () =>
-  http.get<ScreenerStatus>("/screener/status").then((r) => r.data);
+// 沪深300筛选(数据库驱动的历史运行)
+export const listScreenerRuns = (params?: { limit?: number; offset?: number }) =>
+  http.get<ScreeningRun[]>("/screener/runs", { params }).then((r) => r.data);
+export const getScreenerRun = (id: string) =>
+  http.get<ScreeningRun>(`/screener/runs/${id}`).then((r) => r.data);
 
-// 鑲＄エ鍚嶇О涓庢悳绱?
+// 预测历史
+export const getForecastHistory = (symbol: string) =>
+  http.get<ForecastSnapshot[]>(`/forecasts/${symbol}`).then((r) => r.data);
+
+// 股票名称与搜索
 export interface SymbolInfo {
   code: string;
   name: string;
@@ -145,7 +120,7 @@ export const getSymbolNames = (codes: string[]) =>
     })
     .then((r) => r.data);
 
-// 鎶€鏈寚鏍?
+// 技术指标
 export interface IndicatorReport {
   symbol: string;
   ready: boolean;
@@ -174,3 +149,29 @@ export const getIndicators = (symbol: string, days = 120) =>
     .then((r) => r.data);
 
 export default http;
+// ===== Phase 2: 研究闭环 =====
+import type { CaseCreate, CaseSummary, ResearchCaseDetail, StockResearchView } from "../types";
+
+export const getStockResearch = (symbol: string, as_of?: string) =>
+  http.get<StockResearchView>(`/research/stocks/${symbol}`, { params: { as_of } }).then((r) => r.data);
+
+export const createResearchCase = (payload: CaseCreate) =>
+  http.post<CaseSummary>("/research/cases", payload).then((r) => r.data);
+
+export const listResearchCases = (params?: { symbol?: string; status?: string }) =>
+  http.get<CaseSummary[]>("/research/cases", { params }).then((r) => r.data);
+
+export const getResearchCase = (caseId: string) =>
+  http.get<ResearchCaseDetail>(`/research/cases/${caseId}`).then((r) => r.data);
+
+export const appendEvidence = (caseId: string, payload: { stance: string; category: string; content: string; source_label?: string; source_url?: string; observed_date: string; created_by?: string }) =>
+  http.post(`/research/cases/${caseId}/evidence`, payload).then((r) => r.data);
+
+export const appendDecision = (caseId: string, payload: { direction: string; action: string; rationale: string; confidence: number }) =>
+  http.post(`/research/cases/${caseId}/decisions`, payload).then((r) => r.data);
+
+export const appendReviewNote = (caseId: string, payload: { content: string; attribution_json?: string; error_tags_json?: string; created_by?: string }) =>
+  http.post(`/research/cases/${caseId}/reviews`, payload).then((r) => r.data);
+
+export const closeResearchCase = (caseId: string) =>
+  http.post(`/research/cases/${caseId}/close`).then((r) => r.data);

@@ -7,6 +7,32 @@ from app.models.risk_rule import RiskRule
 from app.models.market_snapshot import MarketSnapshot
 from app.models.signal import Signal
 from app.models.backtest import BacktestRun, BacktestTrade
+from app.models.forecast import (
+    MarketDataBatch,
+    DailyBar,
+    UniverseSnapshot,
+    TradingCalendar,
+    ModelVersion,
+    ScreeningRun,
+    ScreeningCandidate,
+    PredictionSnapshot,
+    ReviewResult,
+)
+from app.models.order_preview import OrderPreview
+from app.models.performance import (
+    MetricBatch,
+    ModelEvaluationRun,
+    ModelPromotionDecision,
+    PerformanceMetric,
+)
+from app.models.settlement_lot import SettlementLot
+from app.models.order_reservation import OrderReservation
+from app.models.research import (
+    ResearchCase,
+    EvidenceEntry,
+    DecisionEntry,
+    ReviewNote,
+)
 
 __all__ = [
     "Account",
@@ -18,4 +44,17 @@ __all__ = [
     "Signal",
     "BacktestRun",
     "BacktestTrade",
+    "MarketDataBatch",
+    "DailyBar",
+    "UniverseSnapshot",
+    "TradingCalendar",
+    "ModelVersion",
+    "ScreeningRun",
+    "ScreeningCandidate",
+    "PredictionSnapshot",
+    "ReviewResult",
+    "ResearchCase",
+    "EvidenceEntry",
+    "DecisionEntry",
+    "ReviewNote",
 ]

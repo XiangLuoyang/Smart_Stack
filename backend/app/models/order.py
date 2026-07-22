@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +27,9 @@ ORDER_TYPE_LIMIT = "LIMIT"
 
 class Order(Base, UUIDPk, TimestampMixin):
     __tablename__ = "orders"
+    __table_args__ = (
+        sa.UniqueConstraint("idempotency_key", name="uq_orders_idempotency_key"),
+    )
 
     account_id: Mapped[str] = mapped_column(String(32), ForeignKey("accounts.id"), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -38,6 +42,11 @@ class Order(Base, UUIDPk, TimestampMixin):
     status: Mapped[str] = mapped_column(String(16), default=ORDER_STATUS_PENDING, nullable=False, index=True)
     reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     filled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    research_case_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("research_cases.id", ondelete="SET NULL"), nullable=True, index=True)
+    decision_entry_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("decision_entries.id", ondelete="SET NULL"), nullable=True)
+    quote_snapshot_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("market_snapshots.id", ondelete="SET NULL"), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     account = relationship("Account", back_populates="orders")
     trades = relationship(
