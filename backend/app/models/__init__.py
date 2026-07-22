@@ -19,6 +19,12 @@ from app.models.forecast import (
     ReviewResult,
 )
 from app.models.order_preview import OrderPreview
+from app.models.performance import (
+    MetricBatch,
+    ModelEvaluationRun,
+    ModelPromotionDecision,
+    PerformanceMetric,
+)
 from app.models.settlement_lot import SettlementLot
 from app.models.order_reservation import OrderReservation
 from app.models.research import (
